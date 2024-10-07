@@ -1,0 +1,19 @@
+---
+title: "Regression Aflevering"
+author: "Chrsitian Hejstvig Larsen and Michaela Lukacova"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(splines)
+```
+
+# Rainfall and Southern Oscillation Index (SOI) data

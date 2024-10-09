@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r libraries}
 library(ggplot2)
+theme_set(theme_bw())
 library(gridExtra)
 library(tidyverse)
 library(splines)
@@ -54,6 +55,27 @@ head(complete_data)
 
 
 ## EDA
+
+Marginal distributions
+
+```{r}
+tmp <- lapply(names(complete_data), function(x)
+  ggplot(data = complete_data[, x, drop = FALSE])+
+    aes_string(x) + xlab(x) + ylab(""))
+
+gd <- geom_density(adjust = 2, fill = gray(0.5))
+gb <- geom_bar(fill = gray(0.5))
+
+grid.arrange(
+  tmp[[1]] + gd,
+  tmp[[2]] + gd,
+  tmp[[3]] + gb,
+  tmp[[4]] + gd,
+  tmp[[5]] + gb
+)
+```
+Rain is quite skewed, and there are not many phase 3 observations. 
+
 
 ## Analysis using SOI phase
 

@@ -14,6 +14,50 @@ library(ggplot2)
 library(gridExtra)
 library(tidyverse)
 library(splines)
+
+# Assignment packages
+library(GLMsData)
+library(statmod)
+library(tweedie)
+library(mgcv)
+
+# Imputations
+library(mice)
 ```
 
 # Rainfall and Southern Oscillation Index (SOI) data
+
+```{r data}
+Rain.data = read.table("RaindataEromanga.txt", header = TRUE)
+head(Rain.data)
+summary(Rain.data)
+```
+## Missing data
+
+From the summary we see that only the Rain variable has missing values. The missingness is not sparse (?). Data has 120 observations, and we are missing 9. We look at if we can see a pattern in the missingness
+
+```{r}
+Rain.data[which(is.na(Rain.data$Rain)),]
+```
+It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
+
+We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
+
+The multiple imputations are done with help of the mice function. mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
+
+```{r}
+# Perform multiple imputation
+imputed_data <- mice(Rain.data, m = 50, maxit = 50, seed = 500)
+complete_data <- complete(imputed_data)
+head(complete_data)
+```
+
+
+## EDA
+
+## Analysis using SOI phase
+
+## Analysis using SOI directly
+
+
+

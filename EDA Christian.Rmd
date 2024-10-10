@@ -1,0 +1,248 @@
+---
+title: "Project EDA"
+output:
+  html_document:
+    code_folding: hide
+    toc: TRUE
+---
+  
+  
+Loading relevant libraries
+```{r warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(results = "hold")
+
+library(GLMsData)     # Project specific package
+library(statmod)      # Project specific package
+library(tweedie)      # Project specific package
+library(mgcv)         # Project specific package
+
+library(dplyr)        # For data manipulation
+library(reshape2)     # For data manipulation
+library(tidyverse)    # For data manipulation
+
+library(splines)      # For splines
+
+library(RwR)          # For data set
+
+library(ggplot2)      # For plotting
+library(gridExtra)    # For arranging plots
+library(lattice)      # For plotting splom()
+library(hexbin)       # For plotting hexbin
+
+library(Hmisc)        # For multiple imputation
+library(rms)          # For multiple imputataion
+library(mice)         # For multiple imputation
+```
+
+
+```{r}
+# Loading the data and converting phase into a factor
+Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+head(Rain.data)
+summary(Rain.data)
+```
+
+# Exploratory Data Analysis
+We wish to explore the data to understand the different variables and especially get an understanding of the missing values. We note that there are only missing values in the variable `Rain` and that the proportion of missing values is
+
+```{r}
+# Checking for missing values
+sum(is.na(Rain.data))/nrow(Rain.data)
+```
+With 7.5 % of the response missing it is not necesarrily safe to delete the observations and we may need more sophisticated imputation techniques than a simple median imputation. Although it is common practice to discard observations with missing response (F. E. Harrell, 2015, p. 47) we will investegate whether or not to do so. We start by looking at the distribution of the missing values compared to the non-missing values.
+
+```{r}
+Rain.data %>% dplyr::filter(is.na(Rain)) %>% summary
+```
+Note that the distribution of the `Phase` variable for the missing values seem quite similar to that of the non-missing values. Similarly the `SOI` variable seem to be distributed similarly to the non-missing values. So, there are no clear danger signs so far. We will continue by looking at the distribution of the variables.
+
+```{r}
+tmp <- lapply(names(Rain.data), function(x)
+  ggplot(data = Rain.data[, x, drop = FALSE]) +
+    aes_string(x) +
+    xlab(x) + 
+    ylab("")
+  )
+
+gd <- geom_density(adjust = 2, fill = "steelblue")
+gb <- geom_bar(fill = "steelblue")
+
+grid.arrange(
+  tmp[[2]] + gd,
+  tmp[[4]] + gd,
+  tmp[[5]] + gb,
+  ncol = 3
+)
+
+tmp_missing <- lapply(names(Rain.data), function(x)
+  ggplot(data = (Rain.data %>% dplyr::filter(is.na(Rain)))[, x, drop = FALSE]) +
+    aes_string(x) +
+    xlab(x) + 
+    ylab("")
+  )
+
+grid.arrange(
+  tmp_missing[[4]] + gd,
+  tmp_missing[[5]] + gb,
+  ncol = 2
+)
+```
+
+We note that the response variable `Rain` is right-skewed, which we should keep in mind when working with the data. In addition we see that category 3 in `Phase` has relatively few observations which we may also need to take into consideration. We note from eyeballing, that there is no clear evidence of difference in the distribution of the variables for the missing values compared to the non-missing values.
+
+
+```{r}
+cp <- cor(data.matrix(subset(Rain.data %>% dplyr::filter(!is.na(Rain)), select = -c(Month, Phase))), method = "spearman")
+ord <- rev(hclust(as.dist(1 - abs(cp)))$order)
+colPal <- colorRampPalette(c("blue", "yellow"), space = "rgb")(100)
+
+levelplot(cp[ord, ord],
+          xlab = "", 
+          ylab = "",
+          col.regions = colPal, 
+          at = seq(-1, 1, length.out=100),
+          colorkey = list(space = "top", labels = list(cex = 1.5)),
+          scales = list(x = list(rot = 45),
+                        y = list(draw = FALSE),
+                        cex = 1.2)
+)
+```
+
+
+```{r}
+cor.print <- function(x, y){
+  panel.text(mean(range(x)), mean(range(y)),
+             paste(round(cor(x,y), digits = 2), sep = '')
+             )
+}
+contVar <- c("Rain", "Year", "SOI")
+splom(na.omit(Rain.data)[, contVar], xlab = "",
+      upper.panel = panel.hexbinplot,
+      pscales = 0, xbins = 20,
+      varnames = contVar,
+      lower.panel = cor.print)
+```
+
+
+
+```{r}
+# Plot rain against year using ggplot
+ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Year") +
+  ylab("Rain") + 
+  ggtitle("Rain against Year") +
+  theme_minimal()
+
+# Plot rain against SOI using ggplot
+ggplot(data = Rain.data, aes(x = SOI, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Rain against SOI") +
+  theme_minimal()
+```
+
+
+```{r}
+facVar <- c("Phase")
+mWage <- melt(Rain.data[, c("Rain", facVar)],
+              id = "Rain")
+
+ggplot(mWage,
+       aes(x = factor(value, levels = 1:5), y = Rain)) +
+  geom_boxplot(fill = I(gray(0.8))) + xlab("") +
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+```
+
+We then make a similar plot as the above but with a violon plot instead of a boxplot. 
+
+```{r}
+
+ggplot(mWage,
+       aes(x = factor(value, levels = 1:5), y = Rain)) +
+  geom_violin(fill = I(gray(0.8))) + xlab("") +
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+
+
+```
+
+# Imputation?
+Based on the above analysis there is no real indication that the missing values are not missing at random. However, we have no way to make sure if this is the case. We are therefore faced with a trade-off. Either we delete the observations with missing values in which case we may end up with a biased model and a model with less power given the fewer observations. However, if we choose to impute the missing values we may end up with a model that is biased in a different way if we misspecify the imputation model. We will therefore try both approaches and compare the results. We start by deleting the observations with missing values.
+
+
+
+We use `aregImpute` from the `Hmisc` package to impute the missing values using multiple imputations. This algorithms uses bootstrap to impute the missing values. For each bootstrapped sample it fits a parametric additive regression spline model to the data and imputes the missing values. By bootstrapping it introduces a natural randomness to the imputation process and hence we in some sense account for the uncertainty in the data. In addition there are a lot of underlying mechanism going on that we have not covered such as how the model is fitted exactly and how the uncertainty in the imputations are calculated to make sure they correspond to the uncertainty in the data. We refrain from going into detail but simply use the `aregImpute` function and then check the imputed values.
+
+We will use the `Year`, `Rain`, `SOI` and `Phase` variables to impute the missing values. We will use 5 imputations. 
+
+```{r}
+Rain.data.imputed <- Rain.data
+Rain.data.imputed$imputed <- is.na(Rain.data.imputed$Rain)
+
+Rain.data.imputation.obj <- aregImpute(~ Year + Rain + SOI + Phase, data = Rain.data.imputed, n.impute = 5)
+Rain.data.imputation.obj$imputed
+
+
+
+
+Rain.data.imputed <- as.data.frame(impute.transcan(Rain.data.imputation.obj, 
+                                     imputation=1, 
+                                     data=Rain.data, 
+                                     list.out=TRUE, 
+                                     pr=FALSE, 
+                                     check=TRUE))
+```
+
+```{r}
+Rain.data_numeric <- Rain.data %>%
+  select(Rain, Year, SOI)
+
+mice_imputed <- data.frame(
+  original = Rain.data$Rain,
+  imputed_pmm = complete(mice(Rain.data, method = "pmm"))$Rain,
+  imputed_cart = complete(mice(Rain.data, method = "cart"))$Rain,
+  imputed_areg = Rain.data.imputed$Rain,
+  imputed_mean = ifelse(is.na(Rain.data$Rain), mean(Rain.data$Rain, na.rm = TRUE), Rain.data$Rain),
+  imputed_median = ifelse(is.na(Rain.data$Rain), median(Rain.data$Rain, na.rm = TRUE), Rain.data$Rain)
+)
+mice_imputed
+```
+
+```{r}
+h1 <- ggplot(mice_imputed, aes(x = original)) +
+  geom_histogram(fill = "#ad1538", color = "#000000", position = "identity") +
+  ggtitle("Original distribution") +
+  theme_classic()
+h2 <- ggplot(mice_imputed, aes(x = imputed_pmm)) +
+  geom_histogram(fill = "#15ad4f", color = "#000000", position = "identity") +
+  ggtitle("Predictive mean matching") +
+  theme_classic()
+h3 <- ggplot(mice_imputed, aes(x = imputed_cart)) +
+  geom_histogram(fill = "#1543ad", color = "#000000", position = "identity") +
+  ggtitle("Classification and regression trees") +
+  theme_classic()
+h4 <- ggplot(mice_imputed, aes(x = imputed_areg)) +
+  geom_histogram(fill = "#ad15a1", color = "#000000", position = "identity") +
+  ggtitle("aregImpute") +
+  theme_classic()
+h5 <- ggplot(mice_imputed, aes(x = imputed_mean)) +
+  geom_histogram(fill = "#15adad", color = "#000000", position = "identity") +
+  ggtitle("Mean imputation") +
+  theme_classic()
+h6 <- ggplot(mice_imputed, aes(x = imputed_median)) +
+  geom_histogram(fill = "#ad15a1", color = "#000000", position = "identity") +
+  ggtitle("Median imputation") +
+  theme_classic()
+
+grid.arrange(h1, h2, h3, h4, h5, h6, nrow = 2, ncol = 3)
+```
+The Lasso imputation is obviously not suited for the task. Likewise the mean and median imputation seem to slightly distort the distribution. The predictive mean matching and the classification and regression trees seem to be the best imputation methods. We will therefore use these two methods to impute the missing values and compare the results.
+
+So I say we either use `aregImpute`, predictive mean matching or classification and regression trees to impute the missing values. Since it is very much a black box what is happening we could instead simply delete the values. 
+
+So to sum up, the upside of using multiple imputation is that we get more observations and hence more power and we do not bias the result if data is not MCAR (given we have properly specified the imputation model). The downside is that we may bias the result if we misspecify the imputation model and the way we have imputed is very much a black box, so we can only visually check that the imputed values do not look completely off.
+
+

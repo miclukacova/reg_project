@@ -170,11 +170,11 @@ ggplot(mWage,
 ```
 
 # Imputation?
-Based on the above analysis there is no real indication that the missing values are not missing at random. However, we have no way to make sure if this is the case. We are therefore faced with a trade-off. Either we delete the observations with missing values in which case we may end up with a biased model and a model with less power given the fewer observations. However, if we choose to impute the missing values we may end up with a model that is biased in a different way if we misspecify the imputation model. We will therefore try both approaches and compare the results. We start by deleting the observations with missing values.
+Based on the above analysis there is no real indication that the missing values should be missing not at random. However, we have no way to make sure if this is the case. We may be concerned with the fact, that it is missing in the four consecutive years 1908, 1909, 1910 and 1911 as well as the four consecutive years 2021, 2022, 2023 and 2024. But since we have no option to get these values or know whether they are actually missing at random, we assume that they are missing at random and then we use multiple imuputation (under the assumption of MAR) to keep power and hopefully also produce an unbiased model.
+
+We use the `aregImpute` from the `Hmisc` package to impute the missing values using multiple imputations. This algorithms uses bootstrap to impute the missing values. For each bootstrapped sample it fits a parametric additive regression spline model to the data and imputes the missing values using a donor observation. By bootstrapping it introduces a natural randomness to the imputation process and hence we in some sense account for the uncertainty in the data. In addition there are a lot of underlying mechanism going on that we have not covered such as how the model is fitted exactly and how the uncertainty in the imputations are calculated to make sure they correspond to the uncertainty in the data. We refrain from going into detail but simply use the `aregImpute` function and then check the imputed values.
 
 
-
-We use `aregImpute` from the `Hmisc` package to impute the missing values using multiple imputations. This algorithms uses bootstrap to impute the missing values. For each bootstrapped sample it fits a parametric additive regression spline model to the data and imputes the missing values. By bootstrapping it introduces a natural randomness to the imputation process and hence we in some sense account for the uncertainty in the data. In addition there are a lot of underlying mechanism going on that we have not covered such as how the model is fitted exactly and how the uncertainty in the imputations are calculated to make sure they correspond to the uncertainty in the data. We refrain from going into detail but simply use the `aregImpute` function and then check the imputed values.
 
 We will use the `Year`, `Rain`, `SOI` and `Phase` variables to impute the missing values. We will use 5 imputations. 
 
@@ -202,8 +202,8 @@ Rain.data_numeric <- Rain.data %>%
 
 mice_imputed <- data.frame(
   original = Rain.data$Rain,
-  imputed_pmm = complete(mice(Rain.data, method = "pmm"))$Rain,
-  imputed_cart = complete(mice(Rain.data, method = "cart"))$Rain,
+  imputed_pmm = complete(mice(Rain.data, method = "pmm", m = 50, seed = 10102024))$Rain,
+  imputed_cart = complete(mice(Rain.data, method = "cart", m = 50, seed = 10102024))$Rain,
   imputed_areg = Rain.data.imputed$Rain,
   imputed_mean = ifelse(is.na(Rain.data$Rain), mean(Rain.data$Rain, na.rm = TRUE), Rain.data$Rain),
   imputed_median = ifelse(is.na(Rain.data$Rain), median(Rain.data$Rain, na.rm = TRUE), Rain.data$Rain)
@@ -239,10 +239,14 @@ h6 <- ggplot(mice_imputed, aes(x = imputed_median)) +
 
 grid.arrange(h1, h2, h3, h4, h5, h6, nrow = 2, ncol = 3)
 ```
-The Lasso imputation is obviously not suited for the task. Likewise the mean and median imputation seem to slightly distort the distribution. The predictive mean matching and the classification and regression trees seem to be the best imputation methods. We will therefore use these two methods to impute the missing values and compare the results.
+The mean and median imputation seem to slightly distort the distribution. The predictive mean matching and the classification and regression trees seem to be the best imputation methods. We will therefore use these two methods to impute the missing values and compare the results.
 
 So I say we either use `aregImpute`, predictive mean matching or classification and regression trees to impute the missing values. Since it is very much a black box what is happening we could instead simply delete the values. 
 
 So to sum up, the upside of using multiple imputation is that we get more observations and hence more power and we do not bias the result if data is not MCAR (given we have properly specified the imputation model). The downside is that we may bias the result if we misspecify the imputation model and the way we have imputed is very much a black box, so we can only visually check that the imputed values do not look completely off.
+
+
+
+
 
 

@@ -1,0 +1,289 @@
+---
+title: "Project practical part"
+output:
+  html_document:
+    code_folding: hide
+    toc: TRUE
+---
+  
+  
+Loading relevant libraries
+```{r warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(results = "hold")
+
+library(GLMsData)     # Project specific package
+library(statmod)      # Project specific package
+library(tweedie)      # Project specific package
+library(mgcv)         # Project specific package
+
+library(dplyr)        # For data manipulation
+library(reshape2)     # For data manipulation
+library(tidyverse)    # For data manipulation
+
+library(splines)      # For splines
+
+library(RwR)          # For data set
+
+library(ggplot2)      # For plotting
+library(gridExtra)    # For arranging plots
+library(lattice)      # For plotting splom()
+library(hexbin)       # For plotting hexbin
+
+library(Hmisc)        # For multiple imputation
+library(rms)          # For multiple imputataion
+library(mice)         # For multiple imputation
+```
+
+
+
+```{r warning = FALSE, message = FALSE, echo = FALSE}
+Rain.data.comp <- complete(mice(Rain.data, method = "pmm", m = 50, seed = 12102024))
+```
+
+
+```{r}
+# Plot rain against year using ggplot
+ggplot(data = Rain.data.comp, aes(x = Year, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Year") +
+  ylab("Rain") + 
+  ggtitle("Imputed Rain against Year") +
+  theme_minimal()
+
+# Plot rain against SOI using ggplot
+ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Year") +
+  ylab("Rain") +
+  ggtitle("Origional Rain against Year") +
+  theme_minimal()
+```
+
+
+# Analysis using SOI phase
+
+In the following part of the project we seek to fit the Tweedie exponential dispersion model to the data, and predict rainfall as a function of the SOI phase. In order to fit a Tweedie model to the data we need to estimate the nuissance parameter $k$ which we assume to be between 1 and 2. 
+
+## Estimating k with a linear regression model
+We initially try to estimate $k$ using the linear relation $VY = \psi \mathcal{V}(\mu) = \psi \mu^k$. This implies that $ \log (VY) = \log(\psi) + k \log(\mu) $. We can therefore estimate $k$ by a linear regression of $\log (VY)$ on $\log(\mu)$. We estimate the variance and mean of the response variable within each SOI phase using the empirical mean and variance:
+
+```{r}
+# Compute empirical mean and variance within each SOI phase
+Rain.data.grp <- Rain.data.comp %>% group_by(Phase) %>% 
+  summarise(meanY = mean(Rain), varY = var(Rain))
+```
+
+With estimates of the mean and variance of $Y$ we can proceed to fit an additive linear regression to estimate $k$:
+
+```{r}
+# Fit a linear model to the data
+lm.fit <- lm(log(varY) ~ log(meanY), data = Rain.data.grp)
+summary(lm.fit)
+```
+
+We get an initial estimate of $k = 1.406$ and $ \psi = \exp(2.054) = 7.800$
+
+```{r}
+k_hat <- lm.fit$coef[[2]]
+psi_hat <- exp(lm.fit$coef[[1]])
+```
+
+Should we consider a different model for instance `glm(varY ~ log(meanY), data = Rain.data.grp, family = Gamma(link = "log"))` or are we happy. The exercise asks us to fit a linear regression model to the data. 
+
+
+We do a visual sanity check to see how well the model fits the data by plotting the fitted regression line on top of the data:
+
+```{r}
+ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  xlab("log(mean(Y))") +
+  ylab("log(var(Y))") +
+  ggtitle("log(var(Y)) against log(mean(Y))") +
+  theme_minimal()
+```
+From the plot it appears that the model fits the data reasonably well. We can therefore assume, that the value of $k$ and $\psi$ are reasonable estimates of the true values.
+
+
+## Fitting a Tweedie model to the data
+
+We can now proceed to fit a Tweedie model to the data. We use the `tweedie` function from the `tweedie` package to fit the model. We use the estimated value of $k$ to fit the model and specifiy `link.power = 0` to use the log-link.
+
+
+```{r}
+# Fit a Tweedie model to the data
+tweedie.fit <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat, link.power = 0))
+summary(tweedie.fit)
+```
+To interpret the model output we recall the five SOI levels
+
++ Phase 1: Consistently negative
++ Phase 2: Consistently positive
++ Phase 3: Rapidly falling
++ Phase 4: Rapidly rising
++ Phase 5: Consistently near zero
+
+Note that Phase1 is taken to be the reference phase. The model suggests that the rainfall for Phase 1 is significantly different from 0 with an average rainfall of 
+
+```{r}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(1)))
+```
+millimeters in July. The model estimates that rainfall for Phase 2 is significantly different from the rainfall in Phase 1 with an average rainfall of 
+```{r}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(2)))
+```
+millimeters in July when SOI is in this phase. The model estimates that the rainfall for Phase 3 is not significantly different from the rainfall in Phase 1 with a predicted rainfall of
+```{r}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(3)))
+```
+millimeters on average in July. The rainfall for Phase 4 is significantly different from the rainfall in Phase 1 according to the model with a predicted average rainfall of 
+
+```{r}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(4)))
+```
+millimeters in July. The model estimates rainfall for Phase 5 to be borderline significantly different from rainfall in Phase 1 with a predicted average rainfall of 
+
+```{r}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(5)))
+```
+millimeters in July. Hence, the model suggests that Phase 2 and Phase 4 leads to most rain on average which is when the SOI is consistently positive and rapidly rising respectively. A bit less rain seem to fall on average in Phase 5 which is when the SOI is consistently near zero, while the model predicts least rain on average in SOI phases 1 and 3. That is, according to the model it appears that the rainfall is most intense when the SOI is consistently positive and rapidly rising.
+
+Note that the model predicts $\psi$ to be $8.236$ which is slightly different from the result obtained from the linear regression where $\psi$ was estimated to be $7.800$.
+
+
+
+## Estimating probability of zero rain in July
+We can use the estimates obtained in the previous exercises to estimate the probability that it will not rain in July. In the theoretical exercises we derived the probability of zero rain to be
+
+$$ \mathbb{P}(Y = 0) = \exp(-\lambda^*) = \exp(-\frac{\mu^{2-k}}{\psi (2-k)}) $$
+We have two estimates of $\psi$, one from the linear regression and one from the Tweedie model, so we can try both to estimate the probability that it will not rain in July. If we plug in the estimated values of $k$ and the empirical mean of our data we get the following estimate of the probability that it will not rain:
+
+```{r}
+# Estimated probability that it will not rain
+psi_hat_tweedie.fit <- summary(tweedie.fit)$dispersion
+mu_hat <- mean(Rain.data.comp$Rain)
+
+exp(-mu_hat^(2 - k_hat)/(psi_hat*(2 - k_hat)))
+exp(-mu_hat^(2 - k_hat)/(psi_hat_model*(2 - k_hat)))
+```
+We note that the two results are very similar $33.6$ pct. against $35.6$ pct. We compare this to the empirical probability of zero rain in July:
+
+```{r}
+sum(Rain.data.comp$Rain == 0)/nrow(Rain.data.comp)
+```
+We note that the empirical estimate is $36.7$ pct. which aligns well with both theoretical estimates. We may be tempted to conclude that the dispersion parameter estimated by the Tweedie model is a better estimate of the true dispersion parameter than the one estimated by the linear regression, since the estimated probability of rain from this estimate is closer to the empirical estimate. However, given how close all three predictions are too each other the difference could simply come from the variance in the data, and it is therefore not possible to conclude based on this, that the estimate from the Tweedie model is better than the one from the linear regression.
+
+
+## Determining k by minimizing AIC
+In the following section we consider an alternative estimation procedure of $k$. In particular we will minimize the Akaike Information Criterion (AIC) using a profile likelihood of a model with SOI phase as explanatory variable to determine the optimal value of $k$. We start by constructing a general profile likelihood function that takes a formula, a family, a dataset and an evaluation function as input to calculate some measure we wish to optimize. 
+
+```{r}
+profile_likelihood <- function(form, family, data, eval) {
+  # Fit GLM model
+  model <- glm(form, 
+               family = family, 
+               data = data)
+  
+  # Extract eval value using
+  eval_val <- eval(model)
+  return(eval_val)
+}
+```
+
+We then define a specific profile likelihood for the Tweedie model as a function of $k$ with `form = Rain ~ Phase`, `family = tweedie(var.power = k, link.power = 0)`, `data = Rain.data.comp` and `eval = AICtweedie`.
+
+
+```{r}
+# Define specific profile likelihood for Tweedie model
+tweedie.AIC_profile_likelihood <- function(k) {
+  profile_likelihood(form = Rain ~ Phase, 
+                         family = tweedie(var.power = k, link.power = 0), 
+                         data = Rain.data.comp,
+                         eval = AICtweedie)
+}
+```
+
+We use the `optimize` function to minimize the AIC and find the optimal value of $k$, where we search for $k$ in the range $(1.1, 1.9)$.
+
+```{r}
+k_hat_optim <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
+k_hat_optim_obj <- optimize(calculate_AIC, lower = 1.1, upper = 1.9)$objective
+k_hat_optim
+```
+
+We note that the optimal value of $k$ using the profile likelihood method is fairly close to the value of $k$ estimated by the linear model
+
+```{r}
+k_hat
+```
+
+To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
+
+```{r}
+k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = calculate_AIC))
+
+ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
+  geom_line() +
+  xlab("k") +
+  ylab("AIC") +
+  ggtitle("AIC against k") +
+  theme_minimal() +
+  geom_vline(xintercept = k_hat_optim, linetype = "dashed") +
+  geom_hline(yintercept = k_hat_optim_obj, linetype = "dashed") +
+  geom_text(aes(x = k_hat_optim + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_optim,3))), 
+            hjust = 0, vjust = 0)
+```
+We conclude, that the `optimize` function has indeed found the global minimum of the AIC for $1<k<2$. We repeat the analysis from the previous exercises using the optimal value of $k$ found by minimizing the profile likelihood.
+
+
+## Re-estimating with new value of k
+
+As before we initially fit a Tweedie model to the data using the optimal value of $k$ found by minimizing the AIC.
+
+```{r}
+# Fit a Tweedie model to the data
+tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat_optim, link.power = 0))
+summary(tweedie.fit.AIC)
+```
+We note a slight decrease in the p-value for all the coefficients but the results are very similar to the previous results and the interpretation is the same. This is not surprising since the optimal value of $k$ is very close to the value of $k$ estimated by the linear model. Note however, that the estimated dispersion parameter $\hat \psi_{k_{AIC}} = 7.866$ is slightly different from the previous Tweedie model estimate $\hat \psi_{k_{lin}} = 8.236$ and closer to the linear model estimate $\hat \psi = 7.800$.
+
+We proceed to compute the estimated probability that it will not rain in July. We plug in the estimated values of $k$ and $\psi$ and the empirical mean of our data we get the following estimate of the probability that it will not rain:
+
+```{r}
+# Estimated probability that it will not rain
+psi_hat_model_AIC <- summary(tweedie.fit.AIC)$dispersion
+
+exp(-mu_hat^(2 - k_hat_optim)/(psi_hat*(2 - k_hat_optim)))
+exp(-mu_hat^(2 - k_hat_optim)/(psi_hat_model_AIC*(2 - k_hat_optim)))
+```
+
+
+
+
+## Diagnostics
+
+```{r}
+linmod_diag <- fortify(tweedie.fit)
+AIC_diag <- fortify(tweedie.fit.AIC)
+
+diag_df <- data.frame(linmod.fitted = linmod_diag$.fitted,
+                      linmod.res = linmod_diag$.resid,
+                      linmod.pearson = residuals(tweedie.fit, type = "pearson"),
+                      linmod.deviance = residuals(tweedie.fit),
+                      AIC.fitted = AIC_diag$.fitted,
+                      AIC.res = AIC_diag$.resid,
+                      AIC.pearson = residuals(tweedie.fit.AIC, type = "pearson"),
+                      AIC.deviance = residuals(tweedie.fit.AIC),
+                      SOI = Rain.data.comp$SOI)
+
+head(diag_df)
+```
+
+
+
+
+
+
+

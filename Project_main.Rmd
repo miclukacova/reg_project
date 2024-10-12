@@ -29,28 +29,54 @@ library(mice)
 # Rainfall and Southern Oscillation Index (SOI) data
 
 ```{r data}
-Rain.data = read.table("RaindataEromanga.txt", header = TRUE)
+Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 head(Rain.data)
 summary(Rain.data)
 ```
+
 ## Missing data
 
-From the summary we see that only the Rain variable has missing values. The missingness is not sparse (?). Data has 120 observations, and we are missing 9. We look at if we can see a pattern in the missingness
+From the summary we see that only the Rain variable has missing values. The missingness is relatively sparse (7.5 % of the response values). We examine data in order to discover any pattern. 
 
 ```{r}
-Rain.data[which(is.na(Rain.data$Rain)),]
+Rain.data[which(is.na(Rain.data$Rain)),] 
 ```
 It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
 
 We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
 
-The multiple imputations are done with help of the mice function. mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
+The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
 
 ```{r}
-# Perform multiple imputation
-imputed_data <- mice(Rain.data, m = 50, maxit = 50, seed = 500)
+Rain.data <- Rain.data[,c("Rain", "SOI", "Phase", "Year")]
+imputed_data <- mice(Rain.data, m = 1, maxit = 50, seed = 10102024, printFlag = FALSE)
+
 complete_data <- complete(imputed_data)
 head(complete_data)
+
+
+# Perform multiple imputation
+#Rain.data.imputed <- Rain.data
+#Rain.data.imputed$imputed <- is.na(Rain.data.imputed$Rain)
+#
+#Rain.data.imputation.obj <- aregImpute(~ Year + Rain + SOI + Phase, 
+#                                       data = Rain.data.imputed, 
+#                                       n.impute = 5)
+#
+#
+#glm_impute <- function(family, form){
+#  fit.mult.impute(form, 
+#                  family = family,
+#                  data = Rain.data, 
+#                  xtrans = Rain.data.imputation.obj$xtrans,
+#                  fitter = glm)
+#}
+#
+#glm_impute(family = "gaussian", form = Rain ~ SOI + Phase + Year)
+#fit.mult.impute( Rain ~ SOI + Phase + Year,
+#                  data = Rain.data, 
+#                  xtrans = Rain.data.imputation.obj$xtrans,
+#                  fitter = lrm)
 ```
 
 
@@ -70,16 +96,121 @@ grid.arrange(
   tmp[[1]] + gd,
   tmp[[2]] + gd,
   tmp[[3]] + gb,
-  tmp[[4]] + gd,
-  tmp[[5]] + gb
+  tmp[[4]] + gd
 )
 ```
 Rain is quite skewed, and there are not many phase 3 observations. 
 
+### SOI and Phase
+
+SOI is a numeric variable, it is the standardized difference between the air pressures at Darwin and Haiti, related to el niño. Phase is a categorical variable, with 5 levels, and is in some way a discretion of the variable SOI. The 5 levels of Phase relate to the sign of SOI but also the direction of this random variable, i.e. whether it is increasing, decreasing or constant. Thus SOI and Phase are related, but both contain information that the other does not. SOI is numeric, and thus more precise, while Phase contains information regarding direction. We investigate how the two variables relate to each other
+
+```{r}
+summary(lm(SOI ~ Phase, Rain.data))
+```
+The adjusted $R^2$ is quite high and the coefficients are highly significant indicating that the Phase variable is a good predictor of SOI. Thus the two variables are very correlated and we must be carefull to include both in our analysis. 
 
 ## Analysis using SOI phase
 
 ## Analysis using SOI directly
+
+Model the rain fall as a function of SOI.
+
+### Model rainfall conditionally on having rained
+
+To model the rainfall conditionally on having rained, we first filter out the observations where the rain fall is zero. 
+
+```{r}
+rain.data1 <- complete_data %>%
+  filter(Rain != 0)
+```
+
+The $k$ we obtained from the analysis using SOI Phase was somewhere between $1$ and $2$. The variance structure of the Gamma and Poisson model would therefore be reasonable candidates as exponential dispersion models. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. The Poisson model has the variance structure $\mathcal{V} (\mu) = \mu$. We fit both models and compare them.
+
+```{r}
+#glm_poisson <- glm(Rain ~ SOI, data = rain.data1, family = poisson)
+#evt quasi poisson
+glm_gamma1 <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
+glm_gamma2 <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
+
+summary(glm_gamma1)
+summary(glm_gamma2)
+
+grid.arrange(
+qplot(SOI, Rain, data = rain.data1) +
+  geom_smooth(method = "glm", method.args = list(family = Gamma("log")), se = FALSE), 
+qplot(SOI, Rain, data = rain.data1) +
+  geom_smooth(method = "glm", method.args = list(family = Gamma), se = FALSE),
+nrow = 1
+)
+```
+
+At a first glance the model fit looks fine. The variable SOI is highly significant. We do model diagnostics
+
+```{r}
+glm_gamma.obj1 <- transform(
+  rain.data1,
+  .fitted = predict(glm_gamma1, type = "response"),
+  .deviance = residuals(glm_gamma1, type = "deviance"),
+  .pearson = residuals(glm_gamma1, type = "pearson")
+)
+
+grid.arrange(
+  qplot(.fitted, .deviance, data = glm_gamma.obj1) + geom_smooth(se = FALSE),
+  qplot(.fitted, .pearson, data = glm_gamma.obj1) + geom_smooth(se = FALSE),
+  #qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj1) + geom_smooth(se = FALSE),
+  ncol=2
+)
+
+glm_gamma.obj2 <- transform(
+  rain.data1,
+  .fitted = predict(glm_gamma2, type = "response"),
+  .deviance = residuals(glm_gamma2, type = "deviance"),
+  .pearson = residuals(glm_gamma2, type = "pearson")
+)
+
+grid.arrange(
+  qplot(.fitted, .deviance, data = glm_gamma.obj2) + geom_smooth(se = FALSE),
+  qplot(.fitted, .pearson, data = glm_gamma.obj2) + geom_smooth(se = FALSE),
+  #qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj2) + geom_smooth(se = FALSE),
+  ncol=2
+)
+```
+The residual plots from the gamma model with log link function seem better than with the canonical link? We can see that there is no clear evidence against the model assumptions. We can evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
+
+```{r}
+res_plots <- list()
+for(i in 1:4){
+  sim_data <- simulate(glm_gamma1)[,1]
+  simGlm <- glm(sim_data ~ rain.data1$SOI, family = Gamma(link = "log"))
+  #res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
+  #  xlab("Fitted values") +
+  #  ylab("Deviance residuals") +
+  #  geom_smooth()
+  #print(c(fitted(simGlm)[1], residuals(simGlm, type = "deviance")[1]))
+}
+
+grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]], ncol = 2)
+
+```
+We can see that they all resemble the deviance residuals we had from before.
+We can also compare the estimated variance function with the empirical mean-variance relationship.
+
+We do cross-validation to compare the two models. 
+
+We should not include more predictors: 
+
+```{r}
+add1(glm_gamma1, Rain ~ SOI + Phase + Year, test = "LRT")
+```
+
+
+
+## Model with Tweedie
+
+```{r}
+tweedie.fit <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat, link.power = 0))
+```
 
 
 

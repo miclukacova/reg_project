@@ -37,9 +37,9 @@ library(mice)         # For multiple imputation
 
 
 ```{r warning = FALSE, message = FALSE, echo = FALSE}
-#Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 Rain.data <- read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
-Rain.data.comp <- complete(mice(Rain.data, method = "pmm", m = 50, seed = 12102024))
+Rain.data.comp <- complete(mice(Rain.data, method = "pmm", m = 50, 
+                                seed = 12102024, printFlag = FALSE), action = "long")
 ```
 
 

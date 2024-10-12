@@ -37,11 +37,12 @@ library(mice)         # For multiple imputation
 
 
 ```{r warning = FALSE, message = FALSE, echo = FALSE}
+Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 Rain.data.comp <- complete(mice(Rain.data, method = "pmm", m = 50, seed = 12102024))
 ```
 
 
-```{r}
+```{r warning = FALSE, message = FALSE}
 # Plot rain against year using ggplot
 ggplot(data = Rain.data.comp, aes(x = Year, y = Rain)) +
   geom_point() +
@@ -83,7 +84,7 @@ lm.fit <- lm(log(varY) ~ log(meanY), data = Rain.data.grp)
 summary(lm.fit)
 ```
 
-We get an initial estimate of $k = 1.406$ and $ \psi = \exp(2.054) = 7.800$
+We get an initial estimate of $k = 1.406$ and $\psi = \exp(2.054) = 7.800$
 
 ```{r}
 k_hat <- lm.fit$coef[[2]]
@@ -166,7 +167,7 @@ psi_hat_tweedie.fit <- summary(tweedie.fit)$dispersion
 mu_hat <- mean(Rain.data.comp$Rain)
 
 exp(-mu_hat^(2 - k_hat)/(psi_hat*(2 - k_hat)))
-exp(-mu_hat^(2 - k_hat)/(psi_hat_model*(2 - k_hat)))
+exp(-mu_hat^(2 - k_hat)/(psi_hat_tweedie.fit*(2 - k_hat)))
 ```
 We note that the two results are very similar $33.6$ pct. against $35.6$ pct. We compare this to the empirical probability of zero rain in July:
 
@@ -209,7 +210,7 @@ We use the `optimize` function to minimize the AIC and find the optimal value of
 
 ```{r}
 k_hat_optim <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
-k_hat_optim_obj <- optimize(calculate_AIC, lower = 1.1, upper = 1.9)$objective
+k_hat_optim_obj <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$objective
 k_hat_optim
 ```
 
@@ -222,7 +223,7 @@ k_hat
 To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
 
 ```{r}
-k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = calculate_AIC))
+k_plot_df <- data.frame(k = seq(1.001, 1.999, by = 0.001), AIC = sapply(seq(1.001, 1.999, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
 
 ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
   geom_line() +

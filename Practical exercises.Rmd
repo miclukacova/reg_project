@@ -49,7 +49,7 @@ ggplot(data = Rain.data.comp, aes(x = Year, y = Rain)) +
   xlab("Year") +
   ylab("Rain") + 
   ggtitle("Imputed Rain against Year") +
-  theme_minimal()
+  theme_bw()
 
 # Plot rain against SOI using ggplot
 ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
@@ -58,7 +58,7 @@ ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
   xlab("Year") +
   ylab("Rain") +
   ggtitle("Original Rain against Year") +
-  theme_minimal()
+  theme_bw()
 ```
 
 
@@ -102,7 +102,7 @@ ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   xlab("log(mean(Y))") +
   ylab("log(var(Y))") +
   ggtitle("log(var(Y)) against log(mean(Y))") +
-  theme_minimal()
+  theme_bw()
 ```
 From the plot it appears that the model fits the data reasonably well. We can therefore assume, that the value of $k$ and $\psi$ are reasonable estimates of the true values.
 
@@ -222,17 +222,17 @@ k_hat
 To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
 
 ```{r}
-k_plot_df <- data.frame(k = seq(1.001, 1.999, by = 0.001), AIC = sapply(seq(1.001, 1.999, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
+k_plot_df <- data.frame(k = seq(1.1, 1.9, by = 0.001), AIC = sapply(seq(1.1, 1.9, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
 
 ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
   geom_line() +
   xlab("k") +
   ylab("AIC") +
   ggtitle("AIC against k") +
-  theme_minimal() +
+  theme_bw() +
   geom_vline(xintercept = k_hat_AIC, linetype = "dashed") +
   geom_hline(yintercept = k_hat_AIC_obj, linetype = "dashed") +
-  geom_text(aes(x = k_hat_AIC + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_AIC,3))), 
+  geom_text(aes(x = k_hat_AIC + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_AIC,3))),
             hjust = 0, vjust = 0)
 ```
 We conclude, that the `optimize` function has indeed found the global minimum of the AIC for $1<k<2$. We repeat the analysis from the previous exercises using the optimal value of $k$ found by minimizing the profile likelihood.
@@ -324,13 +324,13 @@ diag_lin_PR_SOI <- qplot(x = SOI, y = linmod.pearson, data = diag_df) +
   theme(plot.title=element_text(size=10))
 
 grid.arrange(diag_lin_DR_fitted, diag_lin_PR_fitted, diag_lin_DR_SOI, diag_lin_PR_SOI, ncol = 2,
-             top = textGrob(paste0("k = ", round(k_hat, 3)), gp=gpar(fontsize=20,font=1)))
+             top = textGrob(paste0("k = ", round(k_hat, 3))))
 ```
 From the plots there is no clear indication that the model is misspecified. The residuals appear to be randomly scattered around zero which indicates that the model captures the mean and variance structure of the data. We further evaluate the plots with bootstrapping. In particular we simulate data from the fitted model. That is, assuming data is from a Tweedie distribution with the estimated mean, dispersion parameter and $k$ we simulate new data and fit a Tweedie model to the new data. We then plot the residuals against the fitted values and the SOI phase for the new data. 
 
 
 ```{r warning=FALSE}
-set.seed(10122024)
+set.seed(10102024)
 
 # Retrieve the estimated mean value of Y given the covariates
 linmu_hats <- predict(tweedie.fit, type = "response")
@@ -354,16 +354,23 @@ simDiagNew3 <- fortify(simGlmNew3)
 simDiagNew4 <- fortify(simGlmNew4)
 simDiagNew5 <- fortify(simGlmNew5)
 simDiagNew6 <- fortify(simGlmNew6)
-p1 <- qplot(.fitted, .resid, data = simDiagNew1) + geom_smooth()
-p2 <- qplot(.fitted, .resid, data = simDiagNew2) + geom_smooth()
-p3 <- qplot(.fitted, .resid, data = simDiagNew3) + geom_smooth()
-p4 <- qplot(.fitted, .resid, data = simDiagNew4) + geom_smooth()
-p5 <- qplot(.fitted, .resid, data = simDiagNew5) + geom_smooth()
-p6 <- qplot(.fitted, .resid, data = simDiagNew6) + geom_smooth()
+p1 <- qplot(.fitted, .resid, data = simDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p2 <- qplot(.fitted, .resid, data = simDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p3 <- qplot(.fitted, .resid, data = simDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p4 <- qplot(.fitted, .resid, data = simDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p5 <- qplot(.fitted, .resid, data = simDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p6 <- qplot(.fitted, .resid, data = simDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
 
-grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3)
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
 ```
-We see that some of the plots resemble the diagnostic plots of the original model, while others do not. This suggests that the model is not robust to the data generating process which is assumed to be from a Tweedie distribution. We can in particular note, that the simulated Tweedie random variables contain considerably more zeros than the original data:
+We see that the plots by and large resemble the residual plots of the original model, while others do not. This suggests that the model is not robust to the data generating process which is assumed to be from a Tweedie distribution. We can in particular note, that the simulated Tweedie random variables contain considerably more zeros than the original data:
 
 ```{r}
 data.frame(Original = sum(Rain.data.comp$Rain == 0), 
@@ -384,8 +391,9 @@ diag_AIC_DR_fitted <- qplot(x = AIC.fitted, y = AIC.deviance, data = diag_df) +
   geom_smooth() +
   xlab("Fitted values") +
   ylab("Deviance residuals") +
-  ggtitle(paste0("Deviance residuals against fitted values for Tweedie model k = ", round(k_hat_AIC, 3))) +
-  theme_bw()
+  ggtitle("Deviance residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
 
 
 diag_AIC_PR_fitted <- qplot(x = AIC.fitted, y = AIC.pearson, data = diag_df) +
@@ -393,32 +401,36 @@ diag_AIC_PR_fitted <- qplot(x = AIC.fitted, y = AIC.pearson, data = diag_df) +
   geom_smooth() +
   xlab("Fitted values") +
   ylab("Deviance residuals") +
-  ggtitle(paste0("Pearson residuals against fitted values for Tweedie model k = ", round(k_hat_AIC, 3))) +
-  theme_bw()
+  ggtitle("Pearson residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
 
 diag_AIC_DR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
   geom_point() +
   geom_smooth() +
   xlab("SOI") +
   ylab("Deviance residuals") +
-  ggtitle(paste0("Deviance residuals against SOI for Tweedie model k = ", round(k_hat_AIC, 3))) +
-  theme_bw()
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
 
 diag_AIC_PR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
   geom_point() +
   geom_smooth(size = 1) +
   xlab("SOI") +
   ylab("Deviance residuals") +
-  ggtitle(paste0("Deviance residuals against SOI for Tweedie model k = ", round(k_hat_AIC, 3))) +
-  theme_bw()
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
 
-grid.arrange(diag_AIC_DR_fitted, diag_AIC_PR_fitted, diag_AIC_DR_SOI, diag_AIC_PR_SOI, ncol = 2)
+grid.arrange(diag_AIC_DR_fitted, diag_AIC_PR_fitted, diag_AIC_DR_SOI, diag_AIC_PR_SOI, ncol = 2,
+             top = textGrob(paste0("k = ", round(k_hat_AIC, 3)), gp=gpar(fontsize=20,font=1)))
 ```
 
 We notice a similar pattern to the previous model.
 
 ```{r warning=FALSE}
-set.seed(10122024)
+set.seed(10102024)
 AICmu_hats <- predict(tweedie.fit.AIC, type = "response")
 
 AICyNew1 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
@@ -439,14 +451,21 @@ AICsimDiagNew3 <- fortify(AICsimGlmNew3)
 AICsimDiagNew4 <- fortify(AICsimGlmNew4)
 AICsimDiagNew5 <- fortify(AICsimGlmNew5)
 AICsimDiagNew6 <- fortify(AICsimGlmNew6)
-AICp1 <- qplot(.fitted, .resid, data = AICsimDiagNew1) + geom_smooth()
-AICp2 <- qplot(.fitted, .resid, data = AICsimDiagNew2) + geom_smooth()
-AICp3 <- qplot(.fitted, .resid, data = AICsimDiagNew3) + geom_smooth()
-AICp4 <- qplot(.fitted, .resid, data = AICsimDiagNew4) + geom_smooth()
-AICp5 <- qplot(.fitted, .resid, data = AICsimDiagNew5) + geom_smooth()
-AICp6 <- qplot(.fitted, .resid, data = AICsimDiagNew6) + geom_smooth()
+AICp1 <- qplot(.fitted, .resid, data = AICsimDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp2 <- qplot(.fitted, .resid, data = AICsimDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp3 <- qplot(.fitted, .resid, data = AICsimDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp4 <- qplot(.fitted, .resid, data = AICsimDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp5 <- qplot(.fitted, .resid, data = AICsimDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp6 <- qplot(.fitted, .resid, data = AICsimDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
 
-grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3)
+grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
 ```
 
 The pattern appear to be the same as for the previous model. We can also check the number of zeros in the simulated data.
@@ -504,9 +523,9 @@ for (b in 1:B){
                        eval = AICtweedie)
   }
   
-  k_hat <- optimize(tweedieBootstrap.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
+  boot_k_hat <- optimize(tweedieBootstrap.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
   
-  parametric_k_AIC[b] <- k_hat
+  parametric_k_AIC[b] <- boot_k_hat
 }
 
 plot(1:B, parametric_k_AIC)
@@ -547,6 +566,7 @@ plot(1:B, parametric_k_LIN)
 
 
 
+Make violin or boxplot of the bootstrap results. Maybe plot the original estimate of $k$ on top. Maybe discuss variance of the estimates of $k$.
 
 
 

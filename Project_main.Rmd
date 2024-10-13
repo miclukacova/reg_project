@@ -56,14 +56,36 @@ head(complete_data)
 
 
 # Perform multiple imputation
-#Rain.data.imputed <- Rain.data
-#Rain.data.imputed$imputed <- is.na(Rain.data.imputed$Rain)
-#
-#Rain.data.imputation.obj <- aregImpute(~ Year + Rain + SOI + Phase, 
-#                                       data = Rain.data.imputed, 
-#                                       n.impute = 5)
-#
-#
+Rain.data.imputed <- rain.data1
+Rain.data.imputed$imputed <- is.na(rain.data1$Rain)
+
+Rain.data.imputation.obj <- aregImpute(~ Year + Rain + SOI + Phase, 
+                                       data = Rain.data.imputed, 
+                                       n.impute = 5)
+
+imputed_datasets <- list()
+for (i in 1:5) {
+  imputed_datasets[[i]] <- as.data.frame(impute.transcan(
+    Rain.data.imputation.obj, 
+    imputation = i, 
+    data = Rain.data.imputed, 
+    list.out = TRUE, 
+    pr = FALSE))
+}
+
+mult_impute <- function(form, family){
+  glm_fits <- lapply(imputed_datasets, function(imp_data) {
+    glm(form, data = imp_data, family = family)
+    })
+  
+  pooled_results <- pool(glm_fits)
+  
+  return(pooled_results)
+}
+
+mult_impute(form = Rain ~ SOI, family = Gamma("log"))
+
+
 #glm_impute <- function(family, form){
 #  fit.mult.impute(form, 
 #                  family = family,
@@ -114,7 +136,7 @@ The adjusted $R^2$ is quite high and the coefficients are highly significant ind
 
 ## Analysis using SOI directly
 
-Model the rain fall as a function of SOI.
+Model the rain fall as a function of SOI. Since the Tweedie model did not fit data very well
 
 ### Model rainfall conditionally on having rained
 
@@ -148,116 +170,133 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
 ```
 There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. 
 
-Performing the estimation of $k$ as in we the analysis using SOI Phase we obtain a $k$ parameter very close to $2$. 
-
-```{r}
-# Compute empirical mean and variance within each SOI phase
-Rain.data.grp <- rain.data1 %>% group_by(Phase) %>% 
-  summarise(meanY = mean(Rain), varY = var(Rain))
-
-# Fit a linear model to the data
-lm.fit <- lm(log(varY) ~ log(meanY), data = Rain.data.grp)
-summary(lm.fit)
-
-# Estimates
-k_hat <- lm.fit$coef[[2]]
-psi_hat <- exp(lm.fit$coef[[1]])
-k_hat; psi_hat
-
-ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
-  xlab("log(mean(Y))") +
-  ylab("log(var(Y))") +
-  ggtitle("log(var(Y)) against log(mean(Y))") +
-  theme_bw()
-```
-
-The linear model seems to be a good fit, and the k parameter is significant. The Gamma model would therefore be a reasonable candidate as the exponential dispersion models. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. If we choose the log link function we fit the log of the mean  of the response variables as a linear combination of the predictors. If we choose the identity link function we fit the mean of the response variables as a linear combination of the predictors. We fit both models.
+The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. If we choose the log link function we fit the log of the mean of the response variables as a linear combination of the predictors. If we choose the identity link function we fit the mean of the response variables as a linear combination of the predictors. A third option is the canonical link, which is the inverse function. We fit all three models.
 
 ```{r}
 glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
 glm_gamma_id <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("identity"))
-
-summary(glm_gamma_log)
-summary(glm_gamma_id)
-
-grid.arrange(
-qplot(SOI, Rain, data = rain.data1) +
-  geom_smooth(method = "glm", method.args = list(family = Gamma("log")), se = FALSE), 
-qplot(SOI, Rain, data = rain.data1) +
-  geom_smooth(method = "glm", method.args = list(family = Gamma("identity")), se = FALSE),
-nrow = 1
-)
+glm_gamma_inv <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
 ```
 
-At a first glance the model fit looks fine. The variable SOI is highly significant. 
-
-Training error
-```{r}
-
-```
-
-
-We do model diagnostics
+Below we calculate the training error based on the squared deviance loss function. 
 
 ```{r}
-glm_gamma.obj1 <- transform(
-  rain.data1,
-  .fitted = predict(glm_gamma_log, type = "response"),
-  .deviance = residuals(glm_gamma_log, type = "deviance"),
-  .pearson = residuals(glm_gamma_log, type = "pearson")
-)
-
-grid.arrange(
-  qplot(.fitted, .deviance, data = glm_gamma.obj1) + geom_smooth(se = FALSE),
-  qplot(.fitted, .pearson, data = glm_gamma.obj1) + geom_smooth(se = FALSE),
-  #qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj1) + geom_smooth(se = FALSE),
-  ncol=2
-)
-
-glm_gamma.obj2 <- transform(
-  rain.data1,
-  .fitted = predict(glm_gamma_id, type = "response"),
-  .deviance = residuals(glm_gamma_id, type = "deviance"),
-  .pearson = residuals(glm_gamma_id, type = "pearson")
-)
-
-grid.arrange(
-  qplot(.fitted, .deviance, data = glm_gamma.obj2) + geom_smooth(se = FALSE),
-  qplot(.fitted, .pearson, data = glm_gamma.obj2) + geom_smooth(se = FALSE),
-  #qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj2) + geom_smooth(se = FALSE),
-  ncol=2
+tibble(
+  "Link function" = c("Log", "Identity", "Inverse"),
+  "Training error" = c(mean(residuals(glm_gamma_log, type = "deviance")^2), 
+                       mean(residuals(glm_gamma_id, type = "deviance")^2), 
+                       mean(residuals(glm_gamma_inv, type = "deviance")^2))
 )
 ```
-The residual plots from the gamma model with log link function seem better than with the canonical link? We can see that there is no clear evidence against the model assumptions. We can evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
+The identity link function seems to be the best fit in terms of training error. *Det er lidt mærkeligt, for selvom det virker til at identity linket er det bedste fit, så har vi svært ved at fitte den senere?*. We plot the model fits
 
 ```{r}
-res_plots <- list()
-for(i in 1:4){
-  sim_data <- simulate(glm_gamma_log)[,1]
-  simGlm <- glm(sim_data ~ rain.data1$SOI, family = Gamma(link = "log"))
-  mods[[i]] <- simGlm
-  res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
-    xlab("Fitted values") +
-    ylab("Deviance residuals") +
-    geom_smooth()
-}
+log_pred <- predict(glm_gamma_log, newdata = rain.data1, type = "response")
+id_pred <- predict(glm_gamma_id, newdata = rain.data1, type = "response")
+inv_pred <- predict(glm_gamma_inv, newdata = rain.data1, type = "response")
 
-grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]], ncol = 2)
-
+grid.arrange(
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = log_pred), color = "red") +
+    xlab("SOI") +
+    ylab("Rain")+
+    ggtitle("Log link function"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = id_pred), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Identity link function"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = inv_pred), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Inverse link function"),
+  nrow = 1
+)
 ```
-We can see that they all resemble the deviance residuals we had from before.
-We can also compare the estimated variance function with the empirical mean-variance relationship.
 
-We do cross-validation to compare the two models. We first define the error function:
+*We can see that they all resemble the deviance residuals we had from before. There is something wrong here (??)*
+
+### Should we include additional predictors
+
+```{r}
+add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT")
+```
+According to the LRT test there is not evidence in data that suggest that additional predictors should be added to the model. (The LRT test statistic is the comuputed as the difference in deviances between the nested models.)
+
+### Explore possible inclusion of nonlinear effects
+
+We consider to include a non-linear effect of SOI. We consider a natural cubic spline with 2,3,4 degrees of freedom:
+
+```{r}
+form1 <- Rain ~ SOI
+form2 <- Rain ~ ns(SOI, df = 2)
+form3 <- Rain ~ ns(SOI, df = 3)
+form4 <- Rain ~ ns(SOI, df = 4)
+form5 <- Rain ~ ns(SOI, df = 5)
+form6 <- Rain ~ ns(SOI, df = 6)
+
+glm1 <- glm(form1, data = rain.data1, family = Gamma("log"))
+glm2 <- glm(form2, data = rain.data1, family = Gamma("log"))
+glm3 <- glm(form3, data = rain.data1, family = Gamma("log"))
+glm4 <- glm(form4, data = rain.data1, family = Gamma("log"))
+glm5 <- glm(form5, data = rain.data1, family = Gamma("log"))
+glm6 <- glm(form6, data = rain.data1, family = Gamma("log"))
+```
+
+The model fits: 
+
+```{r}
+pred1 <- predict(glm1, newdata = rain.data1, type = "response")
+pred2 <- predict(glm2, newdata = rain.data1, type = "response")
+pred3 <- predict(glm3, newdata = rain.data1, type = "response")
+pred4 <- predict(glm4, newdata = rain.data1, type = "response")
+pred5 <- predict(glm5, newdata = rain.data1, type = "response")
+pred6 <- predict(glm6, newdata = rain.data1, type = "response")
+
+grid.arrange(
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred1), color = "red") +
+    xlab("SOI") +
+    ylab("Rain")+
+    ggtitle("Df = 1"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred2), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 2"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred3), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 3"),
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred4), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 4"),   
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred5), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 5"),
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred6), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 6"),
+  nrow = 2
+)
+````
+
+We do cross-validation to compare the four models. We first define the error function. We use
 
 ```{r}
 # Error function
-dev_func <- function(Y, m, muhat) 2 * (Y * log(Y / (m * muhat)) + 
-                                          (m - Y) * log((m - Y) / (m * (1 - muhat))))
+squared_loss <- function(Y, muhat) mean(Y - muhat)^2
+dev_func <- function(Y, muhat) 2 * (Y * (log(Y) - log(muhat)) +
+                                    log(log(Y)/log(muhat)))
 ```
-*$Y$ is the number of dead beetles, $m$ is the total number of beetles, and $\muhat$ is the model's probability of dying.*
 
 The cross validation function:
 
@@ -273,7 +312,7 @@ cv <- function(data, form, B = 1, k = 8, my_family, error_func){
       modelcv <- glm(form, data = data[group != i, ], family = my_family)
       muhat <- predict(modelcv, newdata = data[group == i, ], type = "response")
       # !!! change input of error function !!!
-      tmp[group == i] <- error_func(data$Dead[group == i], data$Total[group == i], muhat)
+      tmp[group == i] <- error_func(data$Rain[group == i],  muhat)
     }
     PEcv[[b]] <- tmp
   }
@@ -281,38 +320,104 @@ cv <- function(data, form, B = 1, k = 8, my_family, error_func){
 }
 ```
 
-Specifying the form:
-
-```{r}
-form <- matrix(c(Dead, Total - Dead), 7, 2) ~ Dose
-```
-
 Cross validation:
 
 ```{r}
-cv(data = beetle.data, form = form, B = 1, k = 8, my_family = binomial(link=logit), error_func = dev_func)
-```
+cv(data = rain.data1, form = form1, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
 
-For the second model:
+cv(data = rain.data1, form = form2, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
+
+cv(data = rain.data1, form = form3, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
+
+cv(data = rain.data1, form = form4, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
+
+cv(data = rain.data1, form = form5, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
+
+cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = squared_loss)
+```
+*Jeg har lidt problemer med at bruge deviance loss*. We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. 
+
+### Model Diagnostics
+
+We do model diagnostics for the chosen model. 
 
 ```{r}
-form2 <- matrix(c(Dead, Total - Dead), 7, 2) ~ Dose + Method
-cv(data = beetle.data, form = form2, B = 1, k = 8, my_family = binomial(link=logit), error_func = dev_func)
+mod_final <- glm(form2, data = rain.data1, family = Gamma("log"))
+
+glm_gamma.obj <- transform(
+  rain.data1,
+  .fitted = predict(mod_final, type = "response"),
+  .deviance = residuals(mod_final, type = "deviance"),
+  .pearson = residuals(mod_final, type = "pearson")
+)
+
+grid.arrange(
+  qplot(.fitted, .deviance, data = glm_gamma.obj) + geom_smooth(se = FALSE),
+  qplot(.fitted, .pearson, data = glm_gamma.obj) + geom_smooth(se = FALSE),
+  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + geom_smooth(se = FALSE),
+  ncol=3
+)
 ```
 
-We should not include more predictors: 
+Looks good. We can see that there is no clear evidence against the model assumptions. We can evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
 
 ```{r}
-add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT")
-```
-According to the LRT test there is not evidence in data 
+res_plots <- list()
+for(i in 1:6){
+  print(i)
+  sim_data <- simulate(mod_final)[,1]
+  simGlm <- glm(sim_data ~ rain.data1$SOI, family = Gamma(link = "log"))
+  res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth()
+}
 
+grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]],
+              res_plots[[5]], res_plots[[6]], ncol = 3)
+
+```
+*Der er noget som går galt her...*. 
+
+### Report a final model
+
+Final model fit
+
+```{r}
+qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "red") +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Rain ~ ns(SOI, df = 2)")
+```
+
+### Interpretation of the results.
+
+```{r}
+summary(mod_final)
+```
 
 
 ## Model with Tweedie
 
+jeg ved ikke lige helt hvad man gør her... vi kender jeg ikke k hvis det er for soi? og der er vel ikke en nem måde at estimere det på?
+
 ```{r}
-tweedie.fit <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat, link.power = 0))
+tweedie.fit <- glm(Rain ~ SOI, 
+                   data = complete_data, 
+                   family = tweedie(var.power = k_hat, link.power = 0))
 ```
 
 

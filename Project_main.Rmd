@@ -125,34 +125,88 @@ rain.data1 <- complete_data %>%
   filter(Rain != 0)
 ```
 
-The $k$ we obtained from the analysis using SOI Phase was somewhere between $1$ and $2$. The variance structure of the Gamma and Poisson model would therefore be reasonable candidates as exponential dispersion models. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. The Poisson model has the variance structure $\mathcal{V} (\mu) = \mu$. We fit both models and compare them.
+We look at the distribution of the rain fall. 
 
 ```{r}
-#glm_poisson <- glm(Rain ~ SOI, data = rain.data1, family = poisson)
-#evt quasi poisson
-glm_gamma1 <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
-glm_gamma2 <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
+ggplot(data = rain.data1, aes(x = Rain)) +
+  geom_density(fill = gray(0.5)) +
+  xlab("Rain") +
+  ylab("Density") +
+  ggtitle("Rain fall distribution")
+```
+The distribution is still very right skewed. This motivates us to consider the Gamma exponential dispersion model, which is typically used to fit positive continous right skewed data. Consider now the rain fall as a function of the SOI. 
 
-summary(glm_gamma1)
-summary(glm_gamma2)
+```{r warning = FALSE, message = FALSE}
+# Plot rain against year using ggplot
+ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Rain") + 
+  ggtitle("Rain against SOI")
+
+```
+There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. 
+
+Performing the estimation of $k$ as in we the analysis using SOI Phase we obtain a $k$ parameter very close to $2$. 
+
+```{r}
+# Compute empirical mean and variance within each SOI phase
+Rain.data.grp <- rain.data1 %>% group_by(Phase) %>% 
+  summarise(meanY = mean(Rain), varY = var(Rain))
+
+# Fit a linear model to the data
+lm.fit <- lm(log(varY) ~ log(meanY), data = Rain.data.grp)
+summary(lm.fit)
+
+# Estimates
+k_hat <- lm.fit$coef[[2]]
+psi_hat <- exp(lm.fit$coef[[1]])
+k_hat; psi_hat
+
+ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  xlab("log(mean(Y))") +
+  ylab("log(var(Y))") +
+  ggtitle("log(var(Y)) against log(mean(Y))") +
+  theme_bw()
+```
+
+The linear model seems to be a good fit, and the k parameter is significant. The Gamma model would therefore be a reasonable candidate as the exponential dispersion models. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. If we choose the log link function we fit the log of the mean  of the response variables as a linear combination of the predictors. If we choose the identity link function we fit the mean of the response variables as a linear combination of the predictors. We fit both models.
+
+```{r}
+glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
+glm_gamma_id <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("identity"))
+
+summary(glm_gamma_log)
+summary(glm_gamma_id)
 
 grid.arrange(
 qplot(SOI, Rain, data = rain.data1) +
   geom_smooth(method = "glm", method.args = list(family = Gamma("log")), se = FALSE), 
 qplot(SOI, Rain, data = rain.data1) +
-  geom_smooth(method = "glm", method.args = list(family = Gamma), se = FALSE),
+  geom_smooth(method = "glm", method.args = list(family = Gamma("identity")), se = FALSE),
 nrow = 1
 )
 ```
 
-At a first glance the model fit looks fine. The variable SOI is highly significant. We do model diagnostics
+At a first glance the model fit looks fine. The variable SOI is highly significant. 
+
+Training error
+```{r}
+
+```
+
+
+We do model diagnostics
 
 ```{r}
 glm_gamma.obj1 <- transform(
   rain.data1,
-  .fitted = predict(glm_gamma1, type = "response"),
-  .deviance = residuals(glm_gamma1, type = "deviance"),
-  .pearson = residuals(glm_gamma1, type = "pearson")
+  .fitted = predict(glm_gamma_log, type = "response"),
+  .deviance = residuals(glm_gamma_log, type = "deviance"),
+  .pearson = residuals(glm_gamma_log, type = "pearson")
 )
 
 grid.arrange(
@@ -164,9 +218,9 @@ grid.arrange(
 
 glm_gamma.obj2 <- transform(
   rain.data1,
-  .fitted = predict(glm_gamma2, type = "response"),
-  .deviance = residuals(glm_gamma2, type = "deviance"),
-  .pearson = residuals(glm_gamma2, type = "pearson")
+  .fitted = predict(glm_gamma_id, type = "response"),
+  .deviance = residuals(glm_gamma_id, type = "deviance"),
+  .pearson = residuals(glm_gamma_id, type = "pearson")
 )
 
 grid.arrange(
@@ -181,13 +235,13 @@ The residual plots from the gamma model with log link function seem better than 
 ```{r}
 res_plots <- list()
 for(i in 1:4){
-  sim_data <- simulate(glm_gamma1)[,1]
+  sim_data <- simulate(glm_gamma_log)[,1]
   simGlm <- glm(sim_data ~ rain.data1$SOI, family = Gamma(link = "log"))
-  #res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
-  #  xlab("Fitted values") +
-  #  ylab("Deviance residuals") +
-  #  geom_smooth()
-  #print(c(fitted(simGlm)[1], residuals(simGlm, type = "deviance")[1]))
+  mods[[i]] <- simGlm
+  res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth()
 }
 
 grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]], ncol = 2)
@@ -196,13 +250,62 @@ grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]], nco
 We can see that they all resemble the deviance residuals we had from before.
 We can also compare the estimated variance function with the empirical mean-variance relationship.
 
-We do cross-validation to compare the two models. 
+We do cross-validation to compare the two models. We first define the error function:
+
+```{r}
+# Error function
+dev_func <- function(Y, m, muhat) 2 * (Y * log(Y / (m * muhat)) + 
+                                          (m - Y) * log((m - Y) / (m * (1 - muhat))))
+```
+*$Y$ is the number of dead beetles, $m$ is the total number of beetles, and $\muhat$ is the model's probability of dying.*
+
+The cross validation function:
+
+```{r}
+cv <- function(data, form, B = 1, k = 8, my_family, error_func){
+  n <- nrow (data)
+  PEcv <- vector("list", B)
+  tmp <- numeric(n)
+  for (b in 1: B){
+    ## Generating the random division into groups
+    group <- sample(rep(1:k, length.out = n))
+    for (i in 1:k){
+      modelcv <- glm(form, data = data[group != i, ], family = my_family)
+      muhat <- predict(modelcv, newdata = data[group == i, ], type = "response")
+      # !!! change input of error function !!!
+      tmp[group == i] <- error_func(data$Dead[group == i], data$Total[group == i], muhat)
+    }
+    PEcv[[b]] <- tmp
+  }
+  mean(unlist(PEcv))
+}
+```
+
+Specifying the form:
+
+```{r}
+form <- matrix(c(Dead, Total - Dead), 7, 2) ~ Dose
+```
+
+Cross validation:
+
+```{r}
+cv(data = beetle.data, form = form, B = 1, k = 8, my_family = binomial(link=logit), error_func = dev_func)
+```
+
+For the second model:
+
+```{r}
+form2 <- matrix(c(Dead, Total - Dead), 7, 2) ~ Dose + Method
+cv(data = beetle.data, form = form2, B = 1, k = 8, my_family = binomial(link=logit), error_func = dev_func)
+```
 
 We should not include more predictors: 
 
 ```{r}
-add1(glm_gamma1, Rain ~ SOI + Phase + Year, test = "LRT")
+add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT")
 ```
+According to the LRT test there is not evidence in data 
 
 
 

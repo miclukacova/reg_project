@@ -51,7 +51,7 @@ ggplot(data = Rain.data.comp, aes(x = Year, y = Rain)) +
   xlab("Year") +
   ylab("Rain") + 
   ggtitle("Imputed Rain against Year") +
-  theme_minimal()
+  theme_bw()
 
 # Plot rain against SOI using ggplot
 ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
@@ -59,8 +59,8 @@ ggplot(data = Rain.data, aes(x = Year, y = Rain)) +
   geom_smooth() +
   xlab("Year") +
   ylab("Rain") +
-  ggtitle("Origional Rain against Year") +
-  theme_minimal()
+  ggtitle("Original Rain against Year") +
+  theme_bw()
 ```
 
 
@@ -104,7 +104,7 @@ ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   xlab("log(mean(Y))") +
   ylab("log(var(Y))") +
   ggtitle("log(var(Y)) against log(mean(Y))") +
-  theme_minimal()
+  theme_bw()
 ```
 From the plot it appears that the model fits the data reasonably well. We can therefore assume, that the value of $k$ and $\psi$ are reasonable estimates of the true values.
 
@@ -210,9 +210,9 @@ tweedie.AIC_profile_likelihood <- function(k) {
 We use the `optimize` function to minimize the AIC and find the optimal value of $k$, where we search for $k$ in the range $(1.1, 1.9)$.
 
 ```{r}
-k_hat_optim <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
-k_hat_optim_obj <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$objective
-k_hat_optim
+k_hat_AIC <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
+k_hat_AIC_obj <- optimize(tweedie.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$objective
+k_hat_AIC
 ```
 
 We note that the optimal value of $k$ using the profile likelihood method is fairly close to the value of $k$ estimated by the linear model
@@ -224,17 +224,17 @@ k_hat
 To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
 
 ```{r}
-k_plot_df <- data.frame(k = seq(1.001, 1.999, by = 0.001), AIC = sapply(seq(1.001, 1.999, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
+k_plot_df <- data.frame(k = seq(1.1, 1.9, by = 0.001), AIC = sapply(seq(1.1, 1.9, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
 
 ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
   geom_line() +
   xlab("k") +
   ylab("AIC") +
   ggtitle("AIC against k") +
-  theme_minimal() +
-  geom_vline(xintercept = k_hat_optim, linetype = "dashed") +
-  geom_hline(yintercept = k_hat_optim_obj, linetype = "dashed") +
-  geom_text(aes(x = k_hat_optim + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_optim,3))), 
+  theme_bw() +
+  geom_vline(xintercept = k_hat_AIC, linetype = "dashed") +
+  geom_hline(yintercept = k_hat_AIC_obj, linetype = "dashed") +
+  geom_text(aes(x = k_hat_AIC + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_AIC,3))),
             hjust = 0, vjust = 0)
 ```
 We conclude, that the `optimize` function has indeed found the global minimum of the AIC for $1<k<2$. We repeat the analysis from the previous exercises using the optimal value of $k$ found by minimizing the profile likelihood.
@@ -246,7 +246,7 @@ As before we initially fit a Tweedie model to the data using the optimal value o
 
 ```{r}
 # Fit a Tweedie model to the data
-tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat_optim, link.power = 0))
+tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp, family = tweedie(var.power = k_hat_AIC, link.power = 0))
 summary(tweedie.fit.AIC)
 ```
 We note a slight decrease in the p-value for all the coefficients but the results are very similar to the previous results and the interpretation is the same. This is not surprising since the optimal value of $k$ is very close to the value of $k$ estimated by the linear model. Note however, that the estimated dispersion parameter $\hat \psi_{k_{AIC}} = 7.866$ is slightly different from the previous Tweedie model estimate $\hat \psi_{k_{lin}} = 8.236$ and closer to the linear model estimate $\hat \psi = 7.800$.
@@ -257,34 +257,318 @@ We proceed to compute the estimated probability that it will not rain in July. W
 # Estimated probability that it will not rain
 psi_hat_model_AIC <- summary(tweedie.fit.AIC)$dispersion
 
-exp(-mu_hat^(2 - k_hat_optim)/(psi_hat*(2 - k_hat_optim)))
-exp(-mu_hat^(2 - k_hat_optim)/(psi_hat_model_AIC*(2 - k_hat_optim)))
+exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat*(2 - k_hat_AIC)))
+exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_model_AIC*(2 - k_hat_AIC)))
 ```
 
 
 
 
-## Diagnostics
+## Model diagnostics
+
+We proceed to perform diagnostics of the Tweedie models. We start by constructing a data frame with the relevant diagnostic information for both the Tweedie model based on the linear model estimate of $k$ and the Tweedie model based on the AIC estimate of $k$. We extract the fitted values, Pearson residuals and deviance residuals for both models and add the SOI phase as a variable to the data frame.
 
 ```{r}
 linmod_diag <- fortify(tweedie.fit)
 AIC_diag <- fortify(tweedie.fit.AIC)
 
 diag_df <- data.frame(linmod.fitted = linmod_diag$.fitted,
-                      linmod.res = linmod_diag$.resid,
                       linmod.pearson = residuals(tweedie.fit, type = "pearson"),
-                      linmod.deviance = residuals(tweedie.fit),
+                      linmod.deviance = residuals(tweedie.fit, type = "deviance"),
                       AIC.fitted = AIC_diag$.fitted,
-                      AIC.res = AIC_diag$.resid,
                       AIC.pearson = residuals(tweedie.fit.AIC, type = "pearson"),
-                      AIC.deviance = residuals(tweedie.fit.AIC),
+                      AIC.deviance = residuals(tweedie.fit.AIC, type = "deviance"),
                       SOI = Rain.data.comp$SOI)
 
-head(diag_df)
+summary(diag_df)
+```
+
+We then plot the residuals against the fitted values first for the linear model estimate of $k$ and then for the AIC estimate of $k$.
+
+
+### Linear model estimate of k
+
+```{r, warning=FALSE}
+diag_lin_DR_fitted <- qplot(x = linmod.fitted, y = linmod.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_PR_fitted <- qplot(x = linmod.fitted, y = linmod.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Pearson residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_DR_SOI <- qplot(x = SOI, y = linmod.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_PR_SOI <- qplot(x = SOI, y = linmod.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth(size = 1) +
+  xlab("SOI") +
+  ylab("Pearson residuals") +
+  ggtitle("Pearson residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+grid.arrange(diag_lin_DR_fitted, diag_lin_PR_fitted, diag_lin_DR_SOI, diag_lin_PR_SOI, ncol = 2,
+             top = textGrob(paste0("k = ", round(k_hat, 3))))
+```
+From the plots there is no clear indication that the model is misspecified. The residuals appear to be randomly scattered around zero which indicates that the model captures the mean and variance structure of the data. We further evaluate the plots with bootstrapping. In particular we simulate data from the fitted model. That is, assuming data is from a Tweedie distribution with the estimated mean, dispersion parameter and $k$ we simulate new data and fit a Tweedie model to the new data. We then plot the residuals against the fitted values and the SOI phase for the new data. 
+
+
+```{r warning=FALSE}
+set.seed(10102024)
+
+# Retrieve the estimated mean value of Y given the covariates
+linmu_hats <- predict(tweedie.fit, type = "response")
+
+# Use the estimated mean value of Y given the covariates, the estimate of k and the estimated dispersion parameter to simulate new data
+yNew1 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+yNew2 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+yNew3 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+yNew4 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+yNew5 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+yNew6 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat)
+simGlmNew1 <- glm(yNew1 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simGlmNew2 <- glm(yNew2 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simGlmNew3 <- glm(yNew3 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simGlmNew4 <- glm(yNew4 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simGlmNew5 <- glm(yNew5 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simGlmNew6 <- glm(yNew6 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat, link.power = 0))
+simDiagNew1 <- fortify(simGlmNew1)
+simDiagNew2 <- fortify(simGlmNew2)
+simDiagNew3 <- fortify(simGlmNew3)
+simDiagNew4 <- fortify(simGlmNew4)
+simDiagNew5 <- fortify(simGlmNew5)
+simDiagNew6 <- fortify(simGlmNew6)
+p1 <- qplot(.fitted, .resid, data = simDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p2 <- qplot(.fitted, .resid, data = simDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p3 <- qplot(.fitted, .resid, data = simDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p4 <- qplot(.fitted, .resid, data = simDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p5 <- qplot(.fitted, .resid, data = simDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+p6 <- qplot(.fitted, .resid, data = simDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
+```
+We see that the plots by and large resemble the residual plots of the original model, while others do not. This suggests that the model is not robust to the data generating process which is assumed to be from a Tweedie distribution. We can in particular note, that the simulated Tweedie random variables contain considerably more zeros than the original data:
+
+```{r}
+data.frame(Original = sum(Rain.data.comp$Rain == 0), 
+           Sim1 = sum(yNew1 == 0),
+           Sim2 = sum(yNew2 == 0),
+           Sim3 = sum(yNew3 == 0),
+           Sim4 = sum(yNew4 == 0),
+           Sim5 = sum(yNew5 == 0),
+           Sim6 = sum(yNew6 == 0))
+```
+This suggests that there are some issues with the model and that it does not capture the data very well. We run the same diagnostics on the model with $k$ selected by AIC.
+
+### AIC estimate of k
+
+```{r, warning=FALSE}
+diag_AIC_DR_fitted <- qplot(x = AIC.fitted, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+
+diag_AIC_PR_fitted <- qplot(x = AIC.fitted, y = AIC.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Pearson residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_AIC_DR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_AIC_PR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth(size = 1) +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+grid.arrange(diag_AIC_DR_fitted, diag_AIC_PR_fitted, diag_AIC_DR_SOI, diag_AIC_PR_SOI, ncol = 2,
+             top = textGrob(paste0("k = ", round(k_hat_AIC, 3)), gp=gpar(fontsize=20,font=1)))
+```
+
+We notice a similar pattern to the previous model.
+
+```{r warning=FALSE}
+set.seed(10102024)
+AICmu_hats <- predict(tweedie.fit.AIC, type = "response")
+
+AICyNew1 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew2 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew3 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew4 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew5 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew6 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICsimGlmNew1 <- glm(AICyNew1 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew2 <- glm(AICyNew2 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew3 <- glm(AICyNew3 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew4 <- glm(AICyNew4 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew5 <- glm(AICyNew5 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew6 <- glm(AICyNew6 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimDiagNew1 <- fortify(AICsimGlmNew1)
+AICsimDiagNew2 <- fortify(AICsimGlmNew2)
+AICsimDiagNew3 <- fortify(AICsimGlmNew3)
+AICsimDiagNew4 <- fortify(AICsimGlmNew4)
+AICsimDiagNew5 <- fortify(AICsimGlmNew5)
+AICsimDiagNew6 <- fortify(AICsimGlmNew6)
+AICp1 <- qplot(.fitted, .resid, data = AICsimDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp2 <- qplot(.fitted, .resid, data = AICsimDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp3 <- qplot(.fitted, .resid, data = AICsimDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp4 <- qplot(.fitted, .resid, data = AICsimDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp5 <- qplot(.fitted, .resid, data = AICsimDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+AICp6 <- qplot(.fitted, .resid, data = AICsimDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth()
+
+grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
+```
+
+The pattern appear to be the same as for the previous model. We can also check the number of zeros in the simulated data.
+
+```{r}
+data.frame(Original = sum(Rain.data.comp$Rain == 0), 
+           Sim1 = sum(AICyNew1 == 0),
+           Sim2 = sum(AICyNew2 == 0),
+           Sim3 = sum(AICyNew3 == 0),
+           Sim4 = sum(AICyNew4 == 0),
+           Sim5 = sum(AICyNew5 == 0),
+           Sim6 = sum(AICyNew6 == 0))
+```
+
+We again notice a similar pattern.
+
+## Conclusion
+The model suggests that there is a relation. However we notice that the model may not be the best fit.
+
+
+
+
+## Bootstrap estimates of k
+
+We run into a problem, when we try to bootstrap namely that phase 3 in many bootstrap samples will have only zero values. This mean that the mean and variance in this group becomes zero, so it is not possible to take the log of this group, hence the linear model approach is not possible. In addition we can not use the AIC method as the fitted model used in profile likelihood will not be able to converge. There are a few work arounds. We can either introduce a small value to the zeros, if there are only zeros, but this will likely introduce bias to the results. What we do instead is to artificially inflate the size of the dataset by randomly sampling from the data set. By randomly sampling from the data set we do not introduce any extra information to the model
+
+
+
+Since the fitted data produces more zeros and phase 3 in many cases have only zeros, the mean and variance in this group becomes zero, so it is not possible to take the log of this group, hence the linear model approach is not possible. We will therefore use the AIC approach to bootstrap estimate $k$.
+
+```{r}
+#set.seed(10122024)
+B <- 1000
+
+
+#sample_index <- sample(120, 500, replace = T)
+parametric_k_AIC <- numeric(B)
+rain_data_AIC_sample <- Rain.data.comp#[sample_index,]
+AICmu_hats_sample <- AICmu_hats#[sample_index]
+
+
+for (b in 1:B){
+  rain_data_AIC_sample$Rain <- rTweedie(AICmu_hats_sample, psi_hat_model_AIC, p = k_hat_AIC)
+  
+  phase3sum <- rain_data_AIC_sample %>% dplyr::filter(Phase == 3) %>% select(Rain) %>% sum()
+
+  if (phase3sum == 0){
+    rain_data_AIC_sample$Rain[rain_data_AIC_sample$Phase == 3] <- rain_data_AIC_sample$Rain[rain_data_AIC_sample$Phase == 3] + abs(rnorm(length(rain_data_AIC_sample$Rain[rain_data_AIC_sample$Phase == 3]), 0.0001, 0.001))
+  }
+
+  tweedieBootstrap.AIC_profile_likelihood <- function(k) {
+    profile_likelihood(form = Rain ~ Phase, 
+                       family = tweedie(var.power = k, link.power = 0), 
+                       data = rain_data_AIC_sample,
+                       eval = AICtweedie)
+  }
+  
+  boot_k_hat <- optimize(tweedieBootstrap.AIC_profile_likelihood, lower = 1.1, upper = 1.9)$minimum
+  
+  parametric_k_AIC[b] <- boot_k_hat
+}
+
+plot(1:B, parametric_k_AIC)
+```
+
+
+```{r}
+#set.seed(10122024)
+B <- 1000
+
+#sample_index <- sample(120, 500, replace = T)
+parametric_k_LIN <- numeric(B)
+rain_data_LIN_sample <- Rain.data.comp#[sample_index,]
+LINmu_hats_sample <- linmu_hats#[sample_index]
+
+
+for (b in 1:B){
+  rain_data_LIN_sample$Rain <- rTweedie(LINmu_hats_sample, psi_hat_tweedie.fit, p = k_hat)
+  
+  phase3sum <- rain_data_LIN_sample %>% dplyr::filter(Phase == 3) %>% select(Rain) %>% sum()
+
+  if (phase3sum == 0){
+    rain_data_LIN_sample$Rain[rain_data_LIN_sample$Phase == 3] <- rain_data_LIN_sample$Rain[rain_data_LIN_sample$Phase == 3] + abs(rnorm(length(rain_data_LIN_sample$Rain[rain_data_LIN_sample$Phase == 3]), 0.01, 0.01))
+  }
+
+  rain_data_LIN_sample.grp <- rain_data_LIN_sample %>% 
+    group_by(Phase) %>% 
+    summarise(meanY = mean(Rain), varY = var(Rain))
+
+  LINBootstrapLM <- lm(log(varY) ~ log(meanY), data = rain_data_LIN_sample.grp)
+  
+  parametric_k_LIN[b] <- coef(LINBootstrapLM)[2]
+}
+
+plot(1:B, parametric_k_LIN)
 ```
 
 
 
+
+Make violin or boxplot of the bootstrap results. Maybe plot the original estimate of $k$ on top. Maybe discuss variance of the estimates of $k$.
 
 
 

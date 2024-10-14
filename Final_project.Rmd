@@ -24,6 +24,7 @@ library(tidyverse)    # For data manipulation
 library(splines)      # For splines
 
 library(ggplot2)      # For plotting
+theme_set(theme_bw()) # Set theme for ggplot2
 library(gridExtra)    # For arranging plots
 library(grid)         # For arranging plots
 library(lattice)      # For plotting splom()
@@ -45,7 +46,9 @@ In this project we seek to predict the rainfall at Eromanga in Queensland, Austr
 First, we load the data set
 
 ```{r}
-Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+#Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+
+Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 ```
 
 We specify the column classes and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
@@ -670,6 +673,428 @@ grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
 ```
 The pattern appears to be similar to the previous model. There may be some signs in the second and fifth plot that the model fitted on the simulated data diverge slightly from the original model. It is difficult to say if this is just noise or if the second estimate of $k$ is worse that the first estimated $k$.
 
+# Analysis using SOI directly
 
+We choose to model the rain fall conditionally on having rained. To do this we first filter out the observations where the rain fall is zero. 
+
+```{r warning = FALSE, echo = TRUE, message = FALSE}
+rain.data1 <- Rain.data.comp %>%
+  filter(Rain != 0)
+```
+
+We look at the distribution of the rain fall. 
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+ggplot(data = rain.data1, aes(x = Rain)) +
+  geom_density(fill = gray(0.5)) +
+  xlab("Rain") +
+  ylab("Density") +
+  ggtitle("Rain fall distribution")
+```
+The distribution is still very right skewed. This motivates the Gamma exponential dispersion model, which is typically used to fit positive continous right skewed data. Consider now the rain fall as a function of the SOI. 
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+# Plot rain against year using ggplot
+ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Rain") + 
+  ggtitle("Rain against SOI")
+
+```
+There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has a quadratic mean variance relationsship, which also seems like a good fit from the plot above. 
+
+If we choose the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for the rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
+
+```{r}
+glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
+glm_gamma_inv <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
+```
+
+Below we calculate the training error based on the squared deviance loss function. 
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+tibble(
+  "Link function" = c("Log", "Inverse"),
+  "Training error" = c(mean(residuals(glm_gamma_log, type = "deviance")^2), 
+                       mean(residuals(glm_gamma_inv, type = "deviance")^2))
+) %>% pander()
+```
+The log link function seems to be the best fit in terms of training error. We plot the model fits:
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+log_pred <- predict(glm_gamma_log, newdata = rain.data1, type = "response")
+inv_pred <- predict(glm_gamma_inv, newdata = rain.data1, type = "response")
+
+grid.arrange(
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = log_pred), color = "red") +
+    xlab("SOI") +
+    ylab("Rain")+
+    ggtitle("Log link function"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = inv_pred), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Inverse link function"),
+  nrow = 1
+)
+```
+The Gamma model with log link function seems to fit data reasonably well. We choose to proceed with the Gamma model rather than the log link function. 
+
+## Should we include additional predictors?
+
+We perform an LRT test to see if we should include additional predictors. We consider to add the predictors Phase and Year. As mentioned in the EDA, Phase and SOI are very correlated, and it could be problematic to include both in the model.  
+
+```{r}
+add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
+```
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. 
+
+## Explore possible inclusion of nonlinear effects
+
+We consider to include a non-linear effect of SOI. We consider a natural cubic spline with 2,3,4,5 or 6 degrees of freedom:
+
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+form1 <- Rain ~ SOI
+form2 <- Rain ~ ns(SOI, df = 2)
+form3 <- Rain ~ ns(SOI, df = 3)
+form4 <- Rain ~ ns(SOI, df = 4)
+form5 <- Rain ~ ns(SOI, df = 5)
+form6 <- Rain ~ ns(SOI, df = 6)
+
+glm1 <- glm(form1, data = rain.data1, family = Gamma("log"))
+glm2 <- glm(form2, data = rain.data1, family = Gamma("log"))
+glm3 <- glm(form3, data = rain.data1, family = Gamma("log"))
+glm4 <- glm(form4, data = rain.data1, family = Gamma("log"))
+glm5 <- glm(form5, data = rain.data1, family = Gamma("log"))
+glm6 <- glm(form6, data = rain.data1, family = Gamma("log"))
+```
+
+The model fits: 
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+pred1 <- predict(glm1, newdata = rain.data1, type = "response")
+pred2 <- predict(glm2, newdata = rain.data1, type = "response")
+pred3 <- predict(glm3, newdata = rain.data1, type = "response")
+pred4 <- predict(glm4, newdata = rain.data1, type = "response")
+pred5 <- predict(glm5, newdata = rain.data1, type = "response")
+pred6 <- predict(glm6, newdata = rain.data1, type = "response")
+
+grid.arrange(
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred1), color = "red") +
+    xlab("SOI") +
+    ylab("Rain")+
+    ggtitle("No expansion"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred2), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 2"),
+   qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred3), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 3"),
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred4), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 4"),   
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred5), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 5"),
+  qplot(rain.data1$SOI, rain.data1$Rain) + 
+    geom_line(aes(y = pred6), color = "red") +
+    xlab("SOI") +
+    ylab("Rain") +
+    ggtitle("Df = 6"),
+  nrow = 2
+)
+```
+
+Adding more degrees of freedom to the natural cubic splines adds flexibility to the model, allowing it to fit data better. This comes at the expense of potentially overfitting. The model fitted with 6 degress of freedom is quite likely overfitting data. But in order to better assess which model is the best in terms of prediction, we do cross-validation to compare the models. We first define the error function. We use the deviance loss function.
+
+```{r}
+# Error function
+dev_loss <- function(Y, muhat) 2 * (log(muhat / Y) + Y / muhat - 1)
+```
+
+We define the cross validation function. 
+
+```{r}
+cv <- function(data, form, B = 1, k = 8, my_family, error_func){
+  n <- nrow (data)
+  PEcv <- vector("list", B)
+  tmp <- numeric(n)
+  for (b in 1: B){
+    ## Generating the random division into groups
+    group <- sample(rep(1:k, length.out = n))
+    for (i in 1:k){
+      modelcv <- glm(form, data = data[group != i, ], family = my_family)
+      muhat <- predict(modelcv, newdata = data[group == i, ], type = "response")
+      # !!! change input of error function !!!
+      tmp[group == i] <- error_func(data$Rain[group == i],  muhat)
+    }
+    PEcv[[b]] <- tmp
+  }
+  mean(unlist(PEcv))
+}
+```
+
+Since the data set is quite small, we perform LOOCV. This is a non random procedure and we therefore set $B = 1$.
+
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+cv(data = rain.data1, form = form1, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+
+cv(data = rain.data1, form = form2, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+
+cv(data = rain.data1, form = form3, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+
+cv(data = rain.data1, form = form4, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+
+cv(data = rain.data1, form = form5, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+
+cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1), 
+   my_family = Gamma("log"), 
+   error_func = dev_loss)
+```
+We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model without natural cubic splines is very close to performing just as well in terms of generalization error. Since we are interested in prediction, we choose the model with 2 degrees of freedom. If interpretability was of higher priority we would choose the model without natural cubic splines. 
+
+## Model Diagnostics
+
+We do model diagnostics for the chosen model. 
+
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+mod_final <- glm(form2, data = rain.data1, family = Gamma("log"))
+
+glm_gamma.obj <- transform(
+  rain.data1,
+  .fitted = predict(mod_final, type = "response"),
+  .deviance = residuals(mod_final, type = "deviance"),
+  .pearson = residuals(mod_final, type = "pearson")
+)
+
+grid.arrange(
+  qplot(.fitted, .deviance, data = glm_gamma.obj) + geom_smooth(),
+  qplot(.fitted, .pearson, data = glm_gamma.obj) + geom_smooth(),
+  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + geom_smooth(),
+  ncol=3
+)
+```
+
+The model diagnostics look quite good. There is no clear evidence against the model assumptions. We evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
+
+```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+set.seed(1986234)
+glm_list <- list()
+for(i in 1:6){
+  sim_data <- simulate(mod_final)[,1]
+  glm_list[[i]] <- glm(sim_data ~ ns(rain.data1$SOI, df = 2),
+                       family = Gamma(link = "log"))
+}
+
+grid.arrange(
+  qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[2]]), residuals(glm_list[[2]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[3]]), residuals(glm_list[[3]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[4]]), residuals(glm_list[[4]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+   qplot(fitted(glm_list[[5]]), residuals(glm_list[[5]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[6]]), residuals(glm_list[[6]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  ncol = 3
+)
+
+grid.arrange(
+  qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[2]]), residuals(glm_list[[2]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[3]]), residuals(glm_list[[3]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[4]]), residuals(glm_list[[4]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+   qplot(fitted(glm_list[[5]]), residuals(glm_list[[5]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[6]]), residuals(glm_list[[6]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  ncol = 3
+)
+
+```
+The bootstrapped residual plots resemble the original residual plots sufficiently well. This indicates that the fitted model is correct.
+
+## Reporting a final model and interpretation
+
+The final model fit
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+summary(mod_final)
+```
+
+We see that SOI is a significant predictor of rain fall. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. Below the model predictions for a few values of SOI are printed
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+tibble(
+  SOI = c(-20,-10,0,10,20),
+  "Rain Fall" = predict(mod_final, 
+                      newdata = data.frame(SOI = c(-20,-10,0,10,20)), 
+                      type = "response")
+) %>% pander()
+```
+A plot of the model fit is shown below.
+
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+pred2 <- predict(mod_final, newdata = rain.data1, type = "response")
+
+qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "red") +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Rain ~ ns(SOI, df = 2)")
+```
+
+The fitted model predicts that rainfall is increasing as a function of SOI. The slope of the model is largest for values of SOI between $-10$ and $10$. For SOI values that are larger or smaller than this, the model is more constant. 
+
+We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model predictions as described on page 220. 
+
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+# Pair sampling
+B <- 1000
+set.seed(170)
+n <- nrow(rain.data1)
+boot_pred <- matrix(nrow = n, ncol = B)
+
+for(b in 1:B){
+  boot_samp <- sample(n, replace = TRUE)
+  boot_mod <- glm(Rain ~ ns(SOI, df = 2), 
+                  data = rain.data1[boot_samp, ], 
+                  family = Gamma("log"))
+  boot_pred[,b] <- predict(boot_mod, newdata = rain.data1, type = "response")
+}
+
+CIs <- matrix(nrow = n, ncol = 2)
+for(i in 1:n){
+  CIs[i,] <- 2*pred2[i] - quantile(boot_pred[i,], probs = c(0.975, 0.025), na.rm = TRUE)
+}
+
+p1 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs[,2], ymax = CIs[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Pair sampling comb. based CI")
+```
+
+We will further construct confidence intervals of the form
+
+$$
+f \pm 1.96 \hat{\text{se}} 
+$$
+Note that these intervals will be symmetric around the point estimate. First we will use residual sampling to estimate standard errors of the model predictions and use these to construct the confidence interval. 
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'} 
+# Residual sampling
+set.seed(170)
+mus <- mod_final$fitted.values
+res <- mod_final$residuals
+boot_pred2 <- matrix(nrow = n, ncol = B)
+
+for(b in 1:B){
+  boot_samp <- sample(n, replace = TRUE)
+  boot_data <- data.frame(Rain = mus + res[boot_samp], SOI = rain.data1$SOI)
+  boot_mod <- glm(Rain ~ ns(SOI, df = 2), 
+                  data = boot_data, 
+                  family = Gamma("log"))
+  boot_pred2[,b] <- predict(boot_mod, newdata = rain.data1, type = "response")
+}
+
+SEs <- numeric(n)
+for(i in 1:n){
+  SEs[i] <- sd(boot_pred2[i,])
+}
+
+CIs2 <- cbind(pred2 - SEs*qnorm(0.975), pred2 + SEs*qnorm(0.975))
+
+p2 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs2[,2], ymax = CIs2[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Res. samp. SE CI")
+```
+
+A last confidence interval we will consider is created in the same way as above, but using analytical standard errors of the model predictions. 
+
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+SE_an <- predict(mod_final, newdata = rain.data1, type = "response", se.fit = TRUE)$se.fit
+CIs3 <- cbind(pred2 - SE_an*qnorm(0.975), pred2 + SE_an*qnorm(0.975))
+
+p3 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs3[,2], ymax = CIs3[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Analytical SE CI")
+```
+
+We will now compare the three confidence intervals. 
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is very very narrow, which seems very unlikely. Apart from that we see that the two other confidence interval are narrow for the SOI values where we have many observations and wide for the SOI values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
+
+## Conclusion
+
+Because of the right skew of data we decided to use the Gamma model to fit the data. We chose the log link as it ensures that the model predictions are kept within the domain of the distribution and since it performed well in terms of training error. We chose not to include further predictors as they were insignificant according to the LRT test.
+
+The model we have fitted is a Gamma model with a log link function and a natural cubic spline with 2 degrees of freedom. This was the model with the smallest generalization error chosen by cross validation, where we considered models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6.
+
+The model is well fitted to the data and the residuals show no evidence against the model assumptions. 
+
+The model predicts that rain fall is increasing as a function of SOI, and that SOI is a significant predictor of rain fall. We have constructed confidence intervals for the model predictions, which show that the model is most certain for SOI values where we have many observations, and less certain for SOI values where we have few observations.
 
 

@@ -1,0 +1,208 @@
+---
+title: "Project in regression - practical part"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    code_folding: hide
+    toc: yes
+---
+
+
+```{r warning = FALSE, message = FALSE, echo = FALSE}
+#Loading relevant libraries
+knitr::opts_chunk$set(results = "hold")
+
+library(GLMsData)     # Project specific package
+library(statmod)      # Project specific package
+library(tweedie)      # Project specific package
+library(mgcv)         # Project specific package
+
+library(dplyr)        # For data manipulation
+library(reshape2)     # For data manipulation
+library(tidyverse)    # For data manipulation
+
+library(splines)      # For splines
+
+library(ggplot2)      # For plotting
+library(gridExtra)    # For arranging plots
+library(grid)         # For arranging plots
+library(lattice)      # For plotting splom()
+library(hexbin)       # For plotting hexbin
+
+library(Hmisc)        # For multiple imputation
+library(mice)         # For multiple imputation
+library(sjmisc)       # For combining multiple imputation
+
+library(pander)       # For printing tables
+library(knitr)        # For printing tables
+```
+
+
+In this project we seek to predict the rainfall at Eromanga in Queensland, Australia, during the month of July. We consider a data set that contains total rainfall in July at Eromanga in the period 1905 to 2024 with the exception of a few years. In addition we have measurements of the southern oscillation index (SOI, the standardized difference between the air pressures at Darwin and Haiti, related to el niño) for the same years. The hypothesis is that the SOI is related to the rainfall in Eromanga. We will througout the project investigate this hypothesis and ultimately use the SOI index to predict the rainfall in Eromanga.
+
+# Exploratory data analysis
+
+First, we load the data set
+
+```{r data}
+Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+```
+We specify the column classes to make sure that the data is read in correctly and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
+
+```{r data}
+head(Rain.data)
+summary(Rain.data)
+```
+
+The data set contains five variables: `Year`, `Rain`, `SOI`, `Phase` and `Month.` The `Month` variable is constant and it will therefore not be of interest for the analysis, but we keep in mind, that the analysis carried out is for the month of July. The variable `Rain` is the response variable and contains the total rainfall in July at Eromanga. We note that this variable contains nine missing values which we return to in the subsequent part of the EDA. The variable `SOI` is the southern oscillation index. The variable Phase is a factor variable that indicates the phase of the SOI with the five levels:
+
++ Phase 1: Consistently negative
++ Phase 2: Consistently positive
++ Phase 3: Rapidly falling
++ Phase 4: Rapidly rising
++ Phase 5: Consistently near zero
+
+
+We plot the marginal distributions of the variables to obtain a visual understanding of the data. 
+
+```{r warning = FALSE, message = FALSE}
+tmp <- lapply(names(Rain.data), function(x)
+  ggplot(data = Rain.data[, x, drop = FALSE]) +
+    aes_string(x) +
+    xlab(x) + 
+    ylab("") +
+    theme_bw()
+  )
+
+gd <- geom_density(adjust = 2, fill = gray(0.5))
+gb <- geom_bar(fill = (gray(0.5)))
+
+grid.arrange(
+  tmp[[2]] + gd,
+  tmp[[4]] + gd,
+  tmp[[5]] + gb,
+  ncol = 3
+)
+```
+
+We note that the response variable `Rain` is right-skewed, which we should keep in mind when working with the data. In addition we see that category 3 in `Phase` has relatively few observations which we may also need to take into consideration. 
+
+We proceed by investigating the co-linearity between the variables in the data set. We investegate correlation between the numerical variables `Rainfall`, `SOI` and `Year` with a correlation plot:
+
+```{r}
+cor.print <- function(x, y){
+  panel.text(mean(range(x)), mean(range(y)),
+             paste(round(cor(x,y), digits = 2), sep = '')
+             )
+}
+contVar <- c("Rain", "Year", "SOI")
+splom(na.omit(Rain.data)[, contVar], xlab = "",
+      upper.panel = panel.hexbinplot,
+      pscales = 0, xbins = 20,
+      varnames = contVar,
+      lower.panel = cor.print)
+```
+
+We note that `Year` is almost uncorrelated to both `Rain` and `SOI`. There is a weak positive correlation between `Rain` and `SOI`. This picture is further confirmed by a Spearman correlation matrix:
+
+```{r}
+cp <- cor(data.matrix(subset(Rain.data %>% dplyr::filter(!is.na(Rain)), select = -c(Month, Phase))), method = "spearman")
+ord <- rev(hclust(as.dist(1 - abs(cp)))$order)
+colPal <- colorRampPalette(c("blue", "yellow"), space = "rgb")(100)
+
+levelplot(cp[ord, ord],
+          xlab = "", 
+          ylab = "",
+          col.regions = colPal, 
+          at = seq(-1, 1, length.out=100),
+          colorkey = list(space = "top", labels = list(cex = 1.5)),
+          scales = list(x = list(rot = 45),
+                        y = list(draw = FALSE),
+                        cex = 1.2)
+)
+```
+
+We investigate the relation between `Rain` and `Phase` by looking at the distribution of `Rain` stratified by `Phase`:
+
+```{r}
+facVar <- c("Phase")
+mRain <- melt(Rain.data[, c("Rain", facVar)],
+              id = "Rain")
+
+ggplot(mRain,
+       aes(x = factor(value, levels = 1:5), y = Rain)) +
+  geom_boxplot(fill = I(gray(0.8))) + xlab("") +
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+```
+
+The boxplot suggests that the rainfall is larger in phase 2 and 4 compared to the other phases where it appears that rainfall is particularly low in phase 1 and 2.
+
+We finally investigate the relation between `SOI` and `Phase`. Both `Phase` and `SOI` describe the SOI and we would therefore expect the two variables to be correlated. We investigate how the two variables relate to each other
+
+```{r}
+summary(lm(SOI ~ Phase, Rain.data))
+```
+
+The adjusted $R^2$ is quite high all coefficients except `Phase3` are highly significant indicating that the `Phase` variable is a good predictor of `SOI`. This can further be supported by the plots
+
+```{r}
+facVar <- c("Phase")
+mSOI <- melt(Rain.data[, c("SOI", facVar)],
+              id = "SOI")
+
+ggplot(mSOI,
+       aes(x = factor(value, levels = 1:5), y = SOI)) +
+  geom_boxplot(fill = I(gray(0.8))) + xlab("") +
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+```
+Thus the two variables are correlated which we should take into account when building a model. `Phase` is a categorical variable containing only 5 levels whereas `SOI` is a numeric variable containing more exact values of SOI. `Phase` however, also contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not so it could still be valuable to include both variables in a model. We will look further into this the a subsequent sections. 
+
+## Missing data
+From the summary we see that only the Rain variable has missing values. The missingness is relatively sparse (7.5 % of the response values). We examine data in order to discover any pattern.
+
+
+
+## EDA
+
+Marginal distributions
+
+```{r}
+tmp <- lapply(names(complete_data), function(x)
+  ggplot(data = complete_data[, x, drop = FALSE])+
+    aes_string(x) + xlab(x) + ylab(""))
+
+gd <- geom_density(adjust = 2, fill = gray(0.5))
+gb <- geom_bar(fill = gray(0.5))
+
+grid.arrange(
+  tmp[[1]] + gd,
+  tmp[[2]] + gd,
+  tmp[[3]] + gb,
+  tmp[[4]] + gd
+)
+```
+Rain is quite skewed, and there are not many phase 3 observations. 
+
+### SOI and Phase
+
+SOI is a numeric variable, it is the standardized difference between the air pressures at Darwin and Haiti, related to el niño. Phase is a categorical variable, with 5 levels, and is in some way a discretion of the variable SOI. The 5 levels of Phase relate to the sign of SOI but also the direction of this random variable, i.e. whether it is increasing, decreasing or constant. Thus SOI and Phase are related, but both contain information that the other does not. SOI is numeric, and thus more precise, while Phase contains information regarding direction. We investigate how the two variables relate to each other
+
+```{r}
+summary(lm(SOI ~ Phase, Rain.data))
+```
+The adjusted $R^2$ is quite high and the coefficients are highly significant indicating that the Phase variable is a good predictor of SOI. Thus the two variables are very correlated and we must be carefull to include both in our analysis. 
+
+
+
+
+
+
+
+
+It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
+
+We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
+
+The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
+

@@ -525,12 +525,15 @@ for (b in 1:B){
                                         psi_hat_model_AIC, 
                                         p = k_hat_AIC)
   
+  # phase3sum <- rain_data_AIC_sample %>% group_by(Phase) %>% summarise(meanY = mean(Rain))
+  
+  
   # Calculate sum for each phase in order to handle zeros
   rain_data_AIC_sample <- rain_data_AIC_sample %>%
     group_by(Phase) %>%
     mutate(phase_sum = sum(Rain)) %>%
     ungroup()
-  
+
   # Add small constant to phases where sum of Rain is zero to avoid log(0)
   rain_data_AIC_sample <- rain_data_AIC_sample %>%
     mutate(Rain = if_else(phase_sum == 0,
@@ -546,6 +549,12 @@ for (b in 1:B){
   
   boot_k_hat <- optimize(tweedieBootstrap.AIC_profile_likelihood, 
                          lower = 1.1, upper = 1.9)$minimum
+  
+  
+  # if (any(phase3sum == 0)){
+  #   print(phase3sum)
+  #   print(boot_k_hat)
+  # }
   
   parametric_k_AIC[b] <- boot_k_hat
 }

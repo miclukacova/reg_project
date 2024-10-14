@@ -1,0 +1,77 @@
+---
+title: "OLD"
+author: "Michaela Lukacova"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# SOI and Phase
+
+SOI is a numeric variable, it is the standardized difference between the air pressures at Darwin and Haiti, related to el niño. Phase is a categorical variable, with 5 levels, and is in some way a discretion of the variable SOI. The 5 levels of Phase relate to the sign of SOI but also the direction of this random variable, i.e. whether it is increasing, decreasing or constant. Thus SOI and Phase are related, but both contain information that the other does not. SOI is numeric, and thus more precise, while Phase contains information regarding direction. We investigate how the two variables relate to each other
+
+```{r}
+summary(lm(SOI ~ Phase, Rain.data))
+```
+The adjusted $R^2$ is quite high and the coefficients are highly significant indicating that the Phase variable is a good predictor of SOI. Thus the two variables are very correlated and we must be carefull to include both in our analysis. 
+
+# Rainfall and Southern Oscillation Index (SOI) data
+
+```{r data}
+Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+head(Rain.data)
+summary(Rain.data)
+```
+
+## Missing data
+
+From the summary we see that only the Rain variable has missing values. The missingness is relatively sparse (7.5 % of the response values). We examine data in order to discover any pattern. 
+
+```{r}
+Rain.data[which(is.na(Rain.data$Rain)),] 
+```
+It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
+
+We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
+
+The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
+
+```{r}
+Rain.data.impute <- mice(Rain.data, method = "pmm", 
+                         m = 5, seed = 10102024,  
+                         printFlag = FALSE)
+
+grouped_imputatations <- list()
+for (i in 1:5) {
+  grouped_imputatations[[i]] <- complete(Rain.data.impute, i) %>% group_by(Phase) %>% 
+    summarise(meanY = mean(Rain), varY = var(Rain))
+}
+
+complete_data <- Rain.data %>% 
+  mutate(Rain = merge_imputations(Rain.data, Rain.data.impute)$Rain)
+```
+
+
+## EDA
+
+Marginal distributions
+
+```{r}
+tmp <- lapply(names(complete_data), function(x)
+  ggplot(data = complete_data[, x, drop = FALSE])+
+    aes_string(x) + xlab(x) + ylab(""))
+
+gd <- geom_density(adjust = 2, fill = gray(0.5))
+gb <- geom_bar(fill = gray(0.5))
+
+grid.arrange(
+  tmp[[1]] + gd,
+  tmp[[2]] + gd,
+  tmp[[3]] + gb,
+  tmp[[4]] + gd
+)
+```
+Rain is quite skewed, and there are not many phase 3 observations. 

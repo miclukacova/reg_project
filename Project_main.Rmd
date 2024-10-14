@@ -2,14 +2,16 @@
 title: "Regression Aflevering"
 author: "Chrsitian Hejstvig Larsen and Michaela Lukacova"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r libraries}
+```{r libraries, include = FALSE}
 library(GLMsData)     # Project specific package
 library(statmod)      # Project specific package
 library(tweedie)      # Project specific package
@@ -32,84 +34,14 @@ library(sjmisc)       # For combining multiple imputation
 
 library(pander)       # For printing tables
 library(knitr)        # For printing tables
-```
 
-# Rainfall and Southern Oscillation Index (SOI) data
-
-```{r data}
 Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
-head(Rain.data)
-summary(Rain.data)
-```
-
-## Missing data
-
-From the summary we see that only the Rain variable has missing values. The missingness is relatively sparse (7.5 % of the response values). We examine data in order to discover any pattern. 
-
-```{r}
-Rain.data[which(is.na(Rain.data$Rain)),] 
-```
-It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
-
-We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
-
-The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
-
-```{r}
-Rain.data.impute <- mice(Rain.data, method = "pmm", 
-                         m = 5, seed = 10102024,  
-                         printFlag = FALSE)
-
-grouped_imputatations <- list()
-for (i in 1:5) {
-  grouped_imputatations[[i]] <- complete(Rain.data.impute, i) %>% group_by(Phase) %>% 
-    summarise(meanY = mean(Rain), varY = var(Rain))
-}
-
-complete_data <- Rain.data %>% 
-  mutate(Rain = merge_imputations(Rain.data, Rain.data.impute)$Rain)
 ```
 
 
-## EDA
+# Analysis using SOI directly
 
-Marginal distributions
-
-```{r}
-tmp <- lapply(names(complete_data), function(x)
-  ggplot(data = complete_data[, x, drop = FALSE])+
-    aes_string(x) + xlab(x) + ylab(""))
-
-gd <- geom_density(adjust = 2, fill = gray(0.5))
-gb <- geom_bar(fill = gray(0.5))
-
-grid.arrange(
-  tmp[[1]] + gd,
-  tmp[[2]] + gd,
-  tmp[[3]] + gb,
-  tmp[[4]] + gd
-)
-```
-Rain is quite skewed, and there are not many phase 3 observations. 
-
-### SOI and Phase
-
-SOI is a numeric variable, it is the standardized difference between the air pressures at Darwin and Haiti, related to el niño. Phase is a categorical variable, with 5 levels, and is in some way a discretion of the variable SOI. The 5 levels of Phase relate to the sign of SOI but also the direction of this random variable, i.e. whether it is increasing, decreasing or constant. Thus SOI and Phase are related, but both contain information that the other does not. SOI is numeric, and thus more precise, while Phase contains information regarding direction. We investigate how the two variables relate to each other
-
-```{r}
-summary(lm(SOI ~ Phase, Rain.data))
-```
-The adjusted $R^2$ is quite high and the coefficients are highly significant indicating that the Phase variable is a good predictor of SOI. Thus the two variables are very correlated and we must be carefull to include both in our analysis. 
-
-## Analysis using SOI phase
-
-## Analysis using SOI directly
-
-Model the rain fall as a function of SOI. Since the Tweedie model did not fit data very well
-
-### Model rainfall conditionally on having rained
-
-To model the rainfall conditionally on having rained, we first filter out the observations where the rain fall is zero. 
+We choose to model the rain fall conditionally on having rained, to do this we first filter out the observations where the rain fall is zero. 
 
 ```{r}
 rain.data1 <- complete_data %>%
@@ -125,7 +57,7 @@ ggplot(data = rain.data1, aes(x = Rain)) +
   ylab("Density") +
   ggtitle("Rain fall distribution")
 ```
-The distribution is still very right skewed. This motivates us to consider the Gamma exponential dispersion model, which is typically used to fit positive continous right skewed data. Consider now the rain fall as a function of the SOI. 
+The distribution is still very right skewed. This motivates the Gamma exponential dispersion model, which is typically used to fit positive continous right skewed data. Consider now the rain fall as a function of the SOI. 
 
 ```{r warning = FALSE, message = FALSE}
 # Plot rain against year using ggplot
@@ -137,7 +69,7 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
   ggtitle("Rain against SOI")
 
 ```
-There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $, which also seems like a good fit from the plot above. 
+There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has a quadratic mean variance relationsship, which also seems like a good fit from the plot above. 
 
 If we choose the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for the rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
 
@@ -175,18 +107,20 @@ grid.arrange(
   nrow = 1
 )
 ```
-The Gamma model with alog link function seems to fit data reasonably well. We choose to proceed with the Gamma model and the log link function. 
+The Gamma model with log link function seems to fit data reasonably well. We choose to proceed with the Gamma model rather than the log link function. 
 
-### Should we include additional predictors?
+## Should we include additional predictors?
+
+We perform an LRT test to see if we should include additional predictors. We consider to add the predictors Phase and Year. As mentioned in the EDA, Phase and SOI are very correlated, and it could be problematic to include both in the model.  
 
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT")
 ```
-According to the LRT test there is not evidence in data that suggest that additional predictors should be added to the model. (The LRT test statistic is the comuputed as the difference in deviances between the nested models.)
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. 
 
-### Explore possible inclusion of nonlinear effects
+## Explore possible inclusion of nonlinear effects
 
-We consider to include a non-linear effect of SOI. We consider a natural cubic spline with 2,3,4 degrees of freedom:
+We consider to include a non-linear effect of SOI. We consider a natural cubic spline with 2,3,4,5 or 6 degrees of freedom:
 
 ```{r}
 form1 <- Rain ~ SOI
@@ -219,7 +153,7 @@ grid.arrange(
     geom_line(aes(y = pred1), color = "red") +
     xlab("SOI") +
     ylab("Rain")+
-    ggtitle("Df = 1"),
+    ggtitle("No expansion"),
    qplot(rain.data1$SOI, rain.data1$Rain) + 
     geom_line(aes(y = pred2), color = "red") +
     xlab("SOI") +
@@ -256,7 +190,7 @@ Adding more degrees of freedom to the natural cubic splines adds flexibility to 
 dev_loss <- function(Y, muhat) 2 * (log(muhat / Y) + Y / muhat - 1)
 ```
 
-The cross validation function:
+We define the cross validation function. 
 
 ```{r}
 cv <- function(data, form, B = 1, k = 8, my_family, error_func){
@@ -305,13 +239,13 @@ cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1),
    my_family = Gamma("log"), 
    error_func = dev_loss)
 ```
-We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model with 1 degree of freedom is very close to performind just as well in terms of generalization error. 
+We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model without natural cubic splines is very close to performing just as well in terms of generalization error. Since we are interested in prediction, we choose the model with 2 degrees of freedom. If interpretability was of higher priority we would choose the model without natural cubic splines. 
 
-### Model Diagnostics
+## Model Diagnostics
 
 We do model diagnostics for the chosen model. 
 
-```{r}
+```{r, message = FALSE}
 mod_final <- glm(form2, data = rain.data1, family = Gamma("log"))
 
 glm_gamma.obj <- transform(
@@ -399,9 +333,23 @@ grid.arrange(
 ```
 The bootstrapped residual plots resemble the original residual plots sufficiently well. This indicates that the fitted model is correct.
 
-### Report a final model
+## Reporting a final model and interpretation
 
-Final model fit
+The final model fit
+```{r}
+summary(mod_final) %>% pander()
+```
+We see that SOI is a significant predictor of rain fall. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. Below the model predictions for a few values of SOI are printed
+
+```{r}
+tibble(
+  SOI = c(-20,-10,0,10,20),
+  "Rain Fall" = predict(mod_final, 
+                      newdata = data.frame(SOI = c(-20,-10,0,10,20)), 
+                      type = "response")
+) %>% pander()
+```
+A plot of the model fit is shown below.
 
 ```{r}
 pred2 <- predict(mod_final, newdata = rain.data1, type = "response")
@@ -413,11 +361,103 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
   ggtitle("Rain ~ ns(SOI, df = 2)")
 ```
 
-### Interpretation of the results.
+The fitted model predicts that rainfall is increasing as a function of SOI. The slope of the model is largest for values of SOI between $-10$ and $10$. For SOI values that are larger or smaller than this, the model is more constant. 
+
+We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model predictions as described on page 220. 
 
 ```{r}
-summary(mod_final)
+# Pair sampling
+B <- 1000
+set.seed(170)
+n <- nrow(rain.data1)
+boot_pred <- matrix(nrow = n, ncol = B)
+
+for(b in 1:B){
+  boot_samp <- sample(n, replace = TRUE)
+  boot_mod <- glm(Rain ~ ns(SOI, df = 2), 
+                  data = rain.data1[boot_samp, ], 
+                  family = Gamma("log"))
+  boot_pred[,b] <- predict(boot_mod, newdata = rain.data1, type = "response")
+}
+
+CIs <- matrix(nrow = n, ncol = 2)
+for(i in 1:n){
+  CIs[i,] <- 2*pred2[i] - quantile(boot_pred[i,], probs = c(0.975, 0.025), na.rm = TRUE)
+}
+
+p1 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs[,2], ymax = CIs[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Comb. based")
 ```
 
+We will further construct confidence intervals of the form
 
+$$
+f \pm 1.96 \hat{\text{se}} 
+$$
+Note that these intervals will be symmetric around the point estimate. First we will use residual sampling to estimate standard errors of the model predictions and use these to construct the confidence interval. 
+```{r}
+# Residual sampling
+set.seed(170)
+mus <- mod_final$fitted.values
+res <- mod_final$residuals
+boot_pred2 <- matrix(nrow = n, ncol = B)
+
+for(b in 1:B){
+  boot_samp <- sample(n, replace = TRUE)
+  boot_data <- data.frame(Rain = mus + res[boot_samp], SOI = rain.data1$SOI)
+  boot_mod <- glm(Rain ~ ns(SOI, df = 2), 
+                  data = boot_data, 
+                  family = Gamma("log"))
+  boot_pred2[,b] <- predict(boot_mod, newdata = rain.data1, type = "response")
+}
+
+SEs <- numeric(n)
+for(i in 1:n){
+  SEs[i] <- sd(boot_pred2[i,])
+}
+
+CIs2 <- cbind(pred2 - SEs*qnorm(0.975), pred2 + SEs*qnorm(0.975))
+
+p2 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs2[,2], ymax = CIs2[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Res. samp.")
+```
+
+A last confidence interval we will consider is created in the same way as above, but using analytical standard errors of the model predictions. 
+
+```{r}
+SE_an <- predict(mod_final, newdata = rain.data1, type = "response", se.fit = TRUE)$se.fit
+CIs3 <- cbind(pred2 - SE_an*qnorm(0.975), pred2 + SE_an*qnorm(0.975))
+
+p3 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
+  geom_line(aes(y = pred2), color = "black") +
+  geom_ribbon(aes(ymin = CIs3[,2], ymax = CIs3[,1]), alpha = 0.3) +
+  xlab("SOI") +
+  ylab("Rain") +
+  ggtitle("Analytical")
+```
+
+We will now compare the three confidence intervals. 
+```{r}
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is very very narrow, which seems very unlikely. Apart from that we see that the two other confidence interval are narrow for the SOI values where we have many observations and wide for the SOI values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
+
+## Conclusion
+
+Because of the right skew of data we decided to use the Gamma model to fit the data. We chose the log link as it ensures that the model predictions are kept within the domain of the distribution and since it performed well in terms of training error. We chose not to include further predictors as they were insignificant according to the LRT test.
+
+The model we have fitted is a Gamma model with a log link function and a natural cubic spline with 2 degrees of freedom. This was the model with the smallest generalization error chosen by cross validation, where we considered models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6.
+
+The model is well fitted to the data and the residuals show no evidence against the model assumptions. 
+
+The model predicts that rain fall is increasing as a function of SOI, and that SOI is a significant predictor of rain fall. We have constructed confidence intervals for the model predictions, which show that the model is most certain for SOI values where we have many observations, and less certain for SOI values where we have few observations.
 

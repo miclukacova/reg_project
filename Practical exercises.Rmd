@@ -37,6 +37,8 @@ library(knitr)        # For printing tables
 ```
 
 
+To increase readability we have omitted code chunks several times. In particular when it comes to plots and other standard output. We have kept the code chunks that are essential for the analysis and understanding of the project. All code can be accessed at https://github.com/miclukacova/reg_project.
+
 
 ```{r warning = FALSE, message = FALSE, echo = FALSE, results = "hide"}
 Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
@@ -496,22 +498,21 @@ grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
 The pattern appears to be similar to the previous model. There may be some signs in the second and fifth plot that the model fitted on the simulated data diverge slightly from the original model. It is difficult to say if this is just noise or if the second estimate of $k$ is worse that the first estimated $k$.
 
 ## Conclusion
-The model suggests that there is a relation. However we notice that the model may not be the best fit.
+The above analysis and models suggest there is an association between rainfall and SOI phase. This was visible from the boxplot in the EDA and confirmed by the models in the subsequent analysis. Given the model diagnostics it appears that the fitted models are both good at describing the mean and variance structure of the data and we can therefore trust the model conclusions. We have not tested the distributional assumptions of the model and the reported standard error of the model estimates are therefore therefore not to be trusted yet.
 
 
 
 
 ## Bootstrap estimates of k
 
-We run into a problem, when we try to bootstrap namely that phase 3 in many bootstrap samples will have only zero values. This mean that the mean and variance in this group becomes zero, so it is not possible to take the log of this group, hence the linear model approach is not possible. In addition we can not use the AIC method as the fitted model used in profile likelihood will not be able to converge. There are a few work arounds. We can either introduce a small value to the zeros, if there are only zeros, but this will likely introduce bias to the results. What we do instead is to artificially inflate the size of the dataset by randomly sampling from the data set. By randomly sampling from the data set we do not introduce any extra information to the model
+In the following section we use parametric bootstrap to estimate the sampling distribution of $k$. To perform the parametric bootstrap we use parameters estimated by a Tweedie model to simulate new data from a Tweedie distribution with these specifications. We then fit a new Tweedie model to the simulated data and estimate $k$. We repeat this process a number of times to estimate the sampling distribution of $k$. To carry out the parametric bootstrap we need the strong distributional assumptions GA3 and A5. We have not formally tested the validity of these assumptions, so further work would require this. Using parametric bootstrap may give us too narrow confidence intervals so we should keep this in mind when checking the resulting estimates.
 
+We use both the AIC method and the linear model method to estimate the sampling distribution $k$. Due to the small number of observations in phase 3 there is a high risk, that some bootstrap samples will contain only zeros for phase 3. This will cause the linear model method to fail, as the mean and variance in this group will be zero and taking the log to these values is impossible. For the AIC method the fitted model used in the profile-likelihood will fail to converge for this bootstrap samples. We therefore need to guard ourselves against these cases. There are several approaches more or less invasive. We have decided to introduce a very small value to the zeros, if there are only zeros in the group. This will likely introduce bias to the results, but it is the least invasive approach.
 
-
-Since the fitted data produces more zeros and phase 3 in many cases have only zeros, the mean and variance in this group becomes zero, so it is not possible to take the log of this group, hence the linear model approach is not possible. We will therefore use the AIC approach to bootstrap estimate $k$.
 
 ```{r}
-#set.seed(10122024)
-B <- 100
+set.seed(10122024)
+B <- 1000
 
 
 #sample_index <- sample(120, 500, replace = T)
@@ -564,8 +565,8 @@ plot(1:B, parametric_k_AIC)
 
 
 ```{r}
-#set.seed(10122024)
-B <- 100
+set.seed(10122024)
+B <- 1000
 
 #sample_index <- sample(120, 500, replace = T)
 parametric_k_LIN <- numeric(B)

@@ -61,7 +61,8 @@ tmp <- lapply(names(Rain.data), function(x)
   ggplot(data = Rain.data[, x, drop = FALSE]) +
     aes_string(x) +
     xlab(x) + 
-    ylab("")
+    ylab("") +
+    theme_bw()
   )
 
 gd <- geom_density(adjust = 2, fill = "steelblue")
@@ -78,7 +79,8 @@ tmp_missing <- lapply(names(Rain.data), function(x)
   ggplot(data = (Rain.data %>% dplyr::filter(is.na(Rain)))[, x, drop = FALSE]) +
     aes_string(x) +
     xlab(x) + 
-    ylab("")
+    ylab("") +
+    theme_bw()
   )
 
 grid.arrange(

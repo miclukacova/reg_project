@@ -467,7 +467,7 @@ tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp,
 pander(summary(tweedie.fit.AIC))
 ```
 
-We note a slight decrease in the p-value for all the coefficients but otherwise the results are very similar to the previous model and the interpretation is the same. This is not surprising since the estimated value of $k$ from the AIC profile likelihood is close to the value of $k$ estimated by the linear model. The estimated dispersion parameter $\hat \psi_{k_{AIC}} = 7.740$ is slightly different from the previous Tweedie model estimate $\hat \psi_{k_{lin}} = 8.212$ and closer to the linear model estimate $\hat \psi = 7.905$.
+We note a slight decrease in standard error and p-value for all coefficients and the estimated dispersion parameter $\hat \psi_{k_{AIC}} = 7.740$ is slightly different from the previous Tweedie model estimate $\hat \psi_{k_{lin}} = 8.212$. Apart from that the results are identical to the previous model and the interpretation is the same.
 
 We recalculate the estimated probability that it will not rain in July. We plug in the estimated values of $k$ and $\psi$ and the empirical mean of our data we get the following estimate of the probability that it will not rain:
 
@@ -683,49 +683,9 @@ The above analysis suggest there is an association between rainfall and SOI phas
 
 ## Bootstrap estimates of k
 
-We conclude this part of the analysis with parametric bootstrap to estimate the sampling distribution of $k$. We use parameters estimated by a Tweedie model to simulate new data from a Tweedie distribution and fit a new Tweedie model to the simulated data to estimate $k$. We repeat this process a number of times to estimate the sampling distribution of $k$. To carry out the parametric bootstrap we need the strong distributional assumptions GA3 and A5. We have not formally tested the validity of these assumptions, so further work should look into these assumptions. For now we should keep in mind, that the parametric bootstrap may result in too narrow confidence intervals.
+We conclude this part of the analysis with parametric bootstrap to estimate the sampling distribution of $k$. Using parameters estimated by a Tweedie model, we simulate data from a Tweedie distribution and fit a new Tweedie model to the simulated data to estimate $k$. We repeat this process multiple times to estimate the sampling distribution of $k$. To carry out the parametric bootstrap we need the strong distributional assumptions GA3 and A5. We have not formally tested these assumptions, so further analysis should check their validity. For now we acknowledge, that the parametric bootstrap may produce too narrow confidence intervals.
 
-We try to estimate the sampling distribution of $k$ using both the AIC method and the linear model method as previous. Due to the small number of observations in phase 3 there is a high probability, that some bootstrap samples will contain only zeros for phase 3. This will cause the linear model method to fail, as the mean and variance in this group will be zero and taking the log of these values produces NAs. For the AIC method the fitted model used in the profile-likelihood will fail to converge for these bootstrap samples. We therefore need to guard ourselves against these cases. We have decided to add a small random value to the zeros in a group, in case they are all zeros. This will likely introduce a bit of bias to the results but alternatively we can not use the approach at all or the estimates we get comes from an algorithm that has not converged, hence the estimates are meaningless.
-
-We first use the linear model method:
-
-```{r}
-set.seed(10102024)
-B <- 1000
-parametric_k_LIN <- numeric(B)
-rain_data_LIN_sample <- Rain.data.comp
-
-for (b in 1:B){
-  # Simulating tweedie random variables using the estimates linmu_hats from
-  # the tweedie model with the linear model estimate of k
-  rain_data_LIN_sample$Rain <- rTweedie(linmu_hats, 
-                                        psi_hat_tweedie.fit, 
-                                        p = k_hat_lin)
-  
-  # Calculate sum for each phase in order to handle zeros
-  rain_data_LIN_sample <- rain_data_LIN_sample %>%
-    group_by(Phase) %>%
-    mutate(phase_sum = sum(Rain)) %>%
-    ungroup()
-    
-  # Add small (random) constant to phases where sum of Rain is zero to avoid log(0)
-  rain_data_LIN_sample <- rain_data_LIN_sample %>%
-    mutate(Rain = if_else(phase_sum == 0,
-                          Rain + abs(rnorm(n(), 0.0001, 0.001)),
-                          Rain))
-
-  # Calculate mean and variance for each phase
-  rain_data_LIN_sample.grp <- rain_data_LIN_sample %>% 
-    group_by(Phase) %>% 
-    summarise(meanY = mean(Rain), varY = var(Rain))
-
-  
-  # Fit linear model to log-transformed data
-  LINBootstrapLM <- lm(log(varY) ~ log(meanY), data = rain_data_LIN_sample.grp)
-  
-  parametric_k_LIN[b] <- coef(LINBootstrapLM)[2]
-}
-```
+We attempt to estimate the sampling distribution of $k$ using the AIC profile likelihood method. Due to the small number of observations in phase 3 there is a high probability, that some bootstrap samples will contain only zeros for phase 3. This implies, that the fitted model used in the profile-likelihood will fail to converge for these bootstrap samples. To mitigate this issue, we add a small random value to the zeros in a group, in case they are all zeros. While this method introduces some bias, we prefer this method over relying on estimates from a non-converged algorithm which would provide meaningless estimates.
 
 ```{r}
 set.seed(10102024)
@@ -768,22 +728,18 @@ for (b in 1:B){
 
 
 ```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-violin_df <- data.frame(k = c(parametric_k_LIN, parametric_k_AIC),
-                        method = as.factor(rep(c("Linear model", "AIC"), each = B)))
+violin_df <- data.frame(k = c(parametric_k_AIC),
+                        method = as.factor(rep(c("AIC"), each = B)))
 
 ggplot(violin_df, aes(x = method, y = k)) +
   geom_violin(fill = I(gray(0.8))) + xlab("") +
   facet_wrap(~ method, scale = "free_x", ncol = 2) + theme_bw() +
-  geom_hline(yintercept = k_hat_lin, color = "blue", linetype = "dashed") +
   geom_hline(yintercept = k_hat_AIC, color = "red", linetype = "dashed") +
-  annotate("text", x = 1, y = k_hat_lin - 0.08, 
-           label = "Linear model estimate of k", 
-           color = "blue", vjust = -0.5) +
-  annotate("text", x = 1, y = k_hat_AIC + 0.03, 
+  annotate("text", x = 1, y = k_hat_AIC, 
            label = "AIC estimate of k", color = "red", vjust = -0.5)
 ```
 
-It appears that the AIC method is more robust than the linear model method. The AIC method has a smaller variance and is closer to the value of $k$ estimated on the real data. The spike on both plots come from the few bootstrap samples where phase 3 has only zero observations. We use the parametric AIC bootstrap to estimate the standard error of the AIC estimate of $k$:
+It appears that the AIC method is fairly robust to changes in the bootstrapped samples with the exception of the spike in the plot that comes from the samples where phase 3 has only zero observations. We use the parametric AIC bootstrap to estimate the standard error of the AIC estimates of $k$:
 
 ```{r}
 se_AIC <- sd(parametric_k_AIC)

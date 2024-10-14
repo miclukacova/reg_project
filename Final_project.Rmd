@@ -689,6 +689,7 @@ We attempt to estimate the sampling distribution of $k$ using the AIC profile li
 
 ```{r}
 set.seed(10102024)
+B <- 1000
 parametric_k_AIC <- numeric(B)
 rain_data_AIC_sample <- Rain.data.comp
 

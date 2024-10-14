@@ -8,7 +8,6 @@ output:
     toc: yes
 ---
 
-
 ```{r warning = FALSE, message = FALSE, echo = FALSE}
 #Loading relevant libraries
 knitr::opts_chunk$set(results = "hold")
@@ -39,23 +38,24 @@ library(knitr)        # For printing tables
 ```
 
 
-In this project we seek to predict the rainfall at Eromanga in Queensland, Australia, during the month of July. We consider a data set that contains total rainfall in July at Eromanga in the period 1905 to 2024 with the exception of a few years. In addition we have measurements of the southern oscillation index (SOI, the standardized difference between the air pressures at Darwin and Haiti, related to el niño) for the same years. The hypothesis is that the SOI is related to the rainfall in Eromanga. We will througout the project investigate this hypothesis and ultimately use the SOI index to predict the rainfall in Eromanga.
+In this project we seek to predict the rainfall at Eromanga in Queensland, Australia, during the month of July. We consider a data set that contains total rainfall in July at Eromanga in the period 1905 to 2024 with the exception of a few years. In addition we have measurements of the southern oscillation index (SOI, the standardized difference between the air pressures at Darwin and Haiti, related to el niño) for the same years. The hypothesis is that the SOI is related to the rainfall in Eromanga. We will throughout the project investigate this hypothesis and ultimately use the SOI index to predict the rainfall in Eromanga.
 
 # Exploratory data analysis
 
 First, we load the data set
 
-```{r data}
+```{r}
 Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 ```
-We specify the column classes to make sure that the data is read in correctly and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
 
-```{r data}
+We specify the column classes and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
+
+```{r}
 head(Rain.data)
 summary(Rain.data)
 ```
 
-The data set contains five variables: `Year`, `Rain`, `SOI`, `Phase` and `Month.` The `Month` variable is constant and it will therefore not be of interest for the analysis, but we keep in mind, that the analysis carried out is for the month of July. The variable `Rain` is the response variable and contains the total rainfall in July at Eromanga. We note that this variable contains nine missing values which we return to in the subsequent part of the EDA. The variable `SOI` is the southern oscillation index. The variable Phase is a factor variable that indicates the phase of the SOI with the five levels:
+The data set contains five variables: `Year`, `Rain`, `SOI`, `Phase` and `Month.` The `Month` variable is constant and will not analyzed, but keep in mind, that the analysis carried out is for the month of July. The response variable `Rain` represents the total rainfall in July at Eromanga and contains nine missing values, which will be addressed in a subsequent part of the EDA. The `SOI` variable is the southern oscillation index, while `Phase` is a categorical variable indicating the SOI phase on five different levels:
 
 + Phase 1: Consistently negative
 + Phase 2: Consistently positive
@@ -63,10 +63,9 @@ The data set contains five variables: `Year`, `Rain`, `SOI`, `Phase` and `Month.
 + Phase 4: Rapidly rising
 + Phase 5: Consistently near zero
 
+We plot the marginal distributions of the variables to visually explore the data. 
 
-We plot the marginal distributions of the variables to obtain a visual understanding of the data. 
-
-```{r warning = FALSE, message = FALSE}
+```{r warning = FALSE, echo = FALSE, fig.width = 5.5, fig.height = 3, fig.align = 'center'}
 tmp <- lapply(names(Rain.data), function(x)
   ggplot(data = Rain.data[, x, drop = FALSE]) +
     aes_string(x) +
@@ -86,11 +85,11 @@ grid.arrange(
 )
 ```
 
-We note that the response variable `Rain` is right-skewed, which we should keep in mind when working with the data. In addition we see that category 3 in `Phase` has relatively few observations which we may also need to take into consideration. 
+We observe that the response variable `Rain` is right-skewed, which should be considered in later analysis. Additionally, Category 3 in `Phase` has relatively few observations, which may also require consideration in subsequent analysis. 
 
-We proceed by investigating the co-linearity between the variables in the data set. We investegate correlation between the numerical variables `Rainfall`, `SOI` and `Year` with a correlation plot:
+We proceed to investegate possible co-linearity between the variables in the data set. We assess correlation between the numerical variables `Rainfall`, `SOI` and `Year` with a correlation plot:
 
-```{r}
+```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
 cor.print <- function(x, y){
   panel.text(mean(range(x)), mean(range(y)),
              paste(round(cor(x,y), digits = 2), sep = '')
@@ -104,28 +103,28 @@ splom(na.omit(Rain.data)[, contVar], xlab = "",
       lower.panel = cor.print)
 ```
 
-We note that `Year` is almost uncorrelated to both `Rain` and `SOI`. There is a weak positive correlation between `Rain` and `SOI`. This picture is further confirmed by a Spearman correlation matrix:
+`Year` is almost uncorrelated with both `Rain` and `SOI`. There is a weak positive correlation between `Rain` and `SOI`.
 
-```{r}
-cp <- cor(data.matrix(subset(Rain.data %>% dplyr::filter(!is.na(Rain)), select = -c(Month, Phase))), method = "spearman")
-ord <- rev(hclust(as.dist(1 - abs(cp)))$order)
-colPal <- colorRampPalette(c("blue", "yellow"), space = "rgb")(100)
-
-levelplot(cp[ord, ord],
-          xlab = "", 
-          ylab = "",
-          col.regions = colPal, 
-          at = seq(-1, 1, length.out=100),
-          colorkey = list(space = "top", labels = list(cex = 1.5)),
-          scales = list(x = list(rot = 45),
-                        y = list(draw = FALSE),
-                        cex = 1.2)
-)
+```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
+# cp <- cor(data.matrix(subset(Rain.data %>% dplyr::filter(!is.na(Rain)), select = -c(Month, Phase))), method = "spearman")
+# ord <- rev(hclust(as.dist(1 - abs(cp)))$order)
+# colPal <- colorRampPalette(c("blue", "yellow"), space = "rgb")(100)
+# 
+# levelplot(cp[ord, ord],
+#           xlab = "", 
+#           ylab = "",
+#           col.regions = colPal, 
+#           at = seq(-1, 1, length.out=100),
+#           colorkey = list(space = "top", labels = list(cex = 1.5)),
+#           scales = list(x = list(rot = 45),
+#                         y = list(draw = FALSE),
+#                         cex = 1.2)
+# )
 ```
 
-We investigate the relation between `Rain` and `Phase` by looking at the distribution of `Rain` stratified by `Phase`:
+To investigate the relation between `Rain` and `Phase` we consider the distribution of `Rain` stratified by `Phase`:
 
-```{r}
+```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
 facVar <- c("Phase")
 mRain <- melt(Rain.data[, c("Rain", facVar)],
               id = "Rain")
@@ -133,20 +132,19 @@ mRain <- melt(Rain.data[, c("Rain", facVar)],
 ggplot(mRain,
        aes(x = factor(value, levels = 1:5), y = Rain)) +
   geom_boxplot(fill = I(gray(0.8))) + xlab("") +
-  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
 
-The boxplot suggests that the rainfall is larger in phase 2 and 4 compared to the other phases where it appears that rainfall is particularly low in phase 1 and 2.
+The boxplot suggests that the rainfall is larger in phase 2 and 4, while it appears particularly low in phase 1 and 2.
 
-We finally investigate the relation between `SOI` and `Phase`. Both `Phase` and `SOI` describe the SOI and we would therefore expect the two variables to be correlated. We investigate how the two variables relate to each other
+We finally investigate the relation between `SOI` and `Phase`. Since both variables describe aspects of SOI we expect some correlation between them.
 
 ```{r}
 summary(lm(SOI ~ Phase, Rain.data))
 ```
+The simple linear model uncovers a high adjusted $R^2$ implying a high correlation between the two variables. All coefficients except `Phase3` are significant indicating that the `Phase` variable is a good predictor of `SOI`. This discovery can further be supported by the boxplot below.
 
-The adjusted $R^2$ is quite high all coefficients except `Phase3` are highly significant indicating that the `Phase` variable is a good predictor of `SOI`. This can further be supported by the plots
-
-```{r}
+```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
 facVar <- c("Phase")
 mSOI <- melt(Rain.data[, c("SOI", facVar)],
               id = "SOI")
@@ -154,55 +152,524 @@ mSOI <- melt(Rain.data[, c("SOI", facVar)],
 ggplot(mSOI,
        aes(x = factor(value, levels = 1:5), y = SOI)) +
   geom_boxplot(fill = I(gray(0.8))) + xlab("") +
-  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_minimal()
+  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
-Thus the two variables are correlated which we should take into account when building a model. `Phase` is a categorical variable containing only 5 levels whereas `SOI` is a numeric variable containing more exact values of SOI. `Phase` however, also contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not so it could still be valuable to include both variables in a model. We will look further into this the a subsequent sections. 
+Since the two predictors are collinear to some extent we will continue with care, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing more exact values of SOI, `Phase` also contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not so it could still be valuable to include both variables in a model. We will go into further details on this matter in subsequent sections. 
+
 
 ## Missing data
-From the summary we see that only the Rain variable has missing values. The missingness is relatively sparse (7.5 % of the response values). We examine data in order to discover any pattern.
-
-
-
-## EDA
-
-Marginal distributions
+With a better understanding of the data we proceed to investigate and handle the missing data. As noted previously there are only missing data (7.5 pct. missing) in the response variable `Rain`.
 
 ```{r}
-tmp <- lapply(names(complete_data), function(x)
-  ggplot(data = complete_data[, x, drop = FALSE])+
-    aes_string(x) + xlab(x) + ylab(""))
+Rain.data %>% dplyr::filter(is.na(Rain))
+```
 
-gd <- geom_density(adjust = 2, fill = gray(0.5))
-gb <- geom_bar(fill = gray(0.5))
+We plot the marginal distribution of the variables with missing data to obtain a visual understanding of the missing data:
+
+```{r warning = FALSE, echo = FALSE, fig.width = 5.5, fig.height = 3, fig.align = 'center'}
+tmp_missing <- lapply(names(Rain.data), function(x)
+  ggplot(data = (Rain.data %>% dplyr::filter(is.na(Rain)))[, x, drop = FALSE]) +
+    aes_string(x) +
+    xlab(x) + 
+    ylab("") +
+    theme_bw()
+  )
 
 grid.arrange(
-  tmp[[1]] + gd,
-  tmp[[2]] + gd,
-  tmp[[3]] + gb,
-  tmp[[4]] + gd
+  tmp_missing[[4]] + gd,
+  tmp_missing[[5]] + gb,
+  ncol = 2
 )
 ```
-Rain is quite skewed, and there are not many phase 3 observations. 
 
-### SOI and Phase
+Given the small number of missing observations, it is difficult to identify any clear trends in the missingness. We note that the missingness occurs in consecutive years (except 1933), but there are no distinct pattern beyond that. Without metadata and additional knowledge we are unable to determine if the data is missing completely at random (MCAR), at random (MAR) or not at random (MNAR). It seems unlikely that observations of large rainfall were selectively deleted or that someone was too lazy to record rainfall during heavy rainfalls. A more plausible explanation, given the consecutive years, is that the equipment may be broken for consecutive years or there was a lack of funding these years. The latter explanations would imply that the data is MCAR which implies MAR and we therefore choose to adopt this assumption.
 
-SOI is a numeric variable, it is the standardized difference between the air pressures at Darwin and Haiti, related to el niño. Phase is a categorical variable, with 5 levels, and is in some way a discretion of the variable SOI. The 5 levels of Phase relate to the sign of SOI but also the direction of this random variable, i.e. whether it is increasing, decreasing or constant. Thus SOI and Phase are related, but both contain information that the other does not. SOI is numeric, and thus more precise, while Phase contains information regarding direction. We investigate how the two variables relate to each other
+Assuming MAR we can use multiple imputation techniques to impute the missing data. If the MAR assumption holds the imputed values are unbiased and the variation in the data set is preserved. We use the `mice()` function (multiple imputations using chained equations) from the package `mice` to perform the multiple imputations. This procedure use random draws from the conditional distribution of the target variable given the other variables. That is, we take a bootstrap sample from our data and fit a regression model to this sample to predict the missing values. We use _predictive mean matching_ (PMM) to replace the missing values in each imputed data set. This method uses the value of a donor observations to fill in the missing values. The donors are identified by matching the predicted value of the target to the donor value. PMM does not require any distributional assumptions and is therefore a fairly robust method (F. E. Harell, Jr., 2015). 
+
+We run the imputations and display the first five rows of the first two imputed data sets:
+
+```{r warning = FALSE}
+Rain.data.impute <- mice(Rain.data, method = "pmm", 
+                         m = 5, seed = 10102024,  
+                         printFlag = FALSE)
+head(complete(Rain.data.impute,1))
+head(complete(Rain.data.impute,2))
+```
+
+We plot the density of the five imputed data sets (red dotted) along with the density of the original data set (black solid) to check if the imputed data sets resemble each other and the original data set.
+
+```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
+ggplot(data = Rain.data, aes(x = Rain)) +
+  geom_density(size = 1) +
+  ggtitle("Density plot of original data and imputed data sets") +
+  geom_density(data = complete(Rain.data.impute, 1), 
+               aes(x = Rain), color = "red", size = 0.5, lty = 2) +
+  geom_density(data = complete(Rain.data.impute, 2), 
+               aes(x = Rain), color = "red", size = 0.5, lty = 2) +
+  geom_density(data = complete(Rain.data.impute, 3), 
+               aes(x = Rain), color = "red", size = 0.5, lty = 2) +
+  geom_density(data = complete(Rain.data.impute, 4), 
+               aes(x = Rain), color = "red", size = 0.5, lty = 2) +
+  geom_density(data = complete(Rain.data.impute, 5), 
+               aes(x = Rain), color = "red", size = 0.5, lty = 2) +
+  ylab("Density") +
+  theme_bw()
+```
+
+We note that the densities for all the imputed data sets look very similar to the original data set. We therefore proceed with the imputed data sets.
+
+
+# Analysis using SOI phase
+In the following part of the project we seek to fit the Tweedie exponential dispersion model to the data, and predict rainfall as a function of the SOI phase. In order to fit a Tweedie model to the data we need to estimate the nuisance parameter $k$ which we assume to be between 1 and 2. 
+
+
+## Estimating k with a linear regression model
+We initially try to estimate $k$ using the linear relation $VY = \psi \mathcal{V}(\mu) = \psi \mu^k$. This implies that $\log (VY) = \log(\psi) + k \log(\mu)$. We can therefore estimate $k$ by a linear regression of $\log (VY)$ on $\log(\mu)$. We estimate the variance and mean of the response variable within each SOI phase for each imputed data set using the empirical mean and variance:
 
 ```{r}
-summary(lm(SOI ~ Phase, Rain.data))
+grouped_imputatations <- list()
+for (i in 1:5) {
+  grouped_imputatations[[i]] <- complete(Rain.data.impute, i) %>% group_by(Phase) %>% 
+    summarise(meanY = mean(Rain), varY = var(Rain))
+}
+pander(grouped_imputatations)
 ```
-The adjusted $R^2$ is quite high and the coefficients are highly significant indicating that the Phase variable is a good predictor of SOI. Thus the two variables are very correlated and we must be carefull to include both in our analysis. 
+
+With estimates of the mean and variance of $Y$ we can proceed to fit an additive linear regression to estimate $k$ and the dispersion parameter for each imputed data set:
+
+```{r}
+lm.fit.imputed <- list()
+for (i in 1:5) {
+  lm.fit.imputed[[i]] <- lm(log(varY) ~ log(meanY), data = grouped_imputatations[[i]])
+}
+pander(lm.fit.imputed)
+```
+
+
+We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Naturally the estimates vary due to the randomness in the imputations. However, like the density plots the predictions are fairly similar. A simple confidence interval for the estimates of each imputation can be plotted:
+
+```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
+k_hat_lin_conf <- list()
+for (i in 1:5) {
+  k_hat_lin_confest <- lm.fit.imputed[[i]]$coef[[2]]
+  k_hat_lin_confsd <- summary(lm.fit.imputed[[i]])$coef[2,2]
+  k_hat_lin_conf[[i]] <- list("Estimate" = k_hat_lin_confest,
+                           "LowerCI" = lm.fit.imputed[[i]]$coef[[2]] - 1.96 * summary(lm.fit.imputed[[i]])$coef[2,2],
+                           "UpperCI" = lm.fit.imputed[[i]]$coef[[2]] + 1.96 * summary(lm.fit.imputed[[i]])$coef[2,2])
+}
+
+estimates_df <- do.call(rbind, lapply(k_hat_lin_conf, as.data.frame))
+estimates_df$Imputation <- paste("Imputation", 1:nrow(estimates_df))  # Add model labels
+
+ggplot(estimates_df, aes(x = Imputation, y = Estimate, ymin = LowerCI, ymax = UpperCI)) +
+  geom_pointrange() +
+  geom_errorbar(aes(ymin = LowerCI, ymax = UpperCI), width = 0.2, color = "black") +
+  theme_minimal() +
+  labs(title = "k estimates for each imputation with Confidence Intervals",
+       x = "Imputation",
+       y = "Estimate") +
+  coord_flip()  # Flip coordinates for a horizontal display
+```
+As all values of $k$ are within a reasonable margin of error, we choose to merge the imputations into a single data set to simplify calculations and communicate results more clearly. We should however keep in mind that this will reduce the variance of the data slightly and for a more thorough analysis we would keep all five imputed data sets. 
+
+We use the `merge_imputations` from the `sjmisc` package which merges multiple imputed data frames from `mice::mids()-objects` into a single data frame by computing the mean or selecting the most likely imputed value.
+
+```{r}
+Rain.data.comp <- Rain.data %>% 
+  mutate(Rain = merge_imputations(Rain.data, Rain.data.impute)$Rain)
+
+Rain.data.grp <- Rain.data.comp %>% 
+  group_by(Phase) %>% 
+  summarise(meanY = mean(Rain), varY = var(Rain))
+
+lm.fit <- lm(log(varY) ~ log(meanY), data = Rain.data.grp)
+pander(lm.fit)
+```
+
+We end up with estimates for $k$ and $\psi$ of
+
+```{r}
+k_hat_lin <- lm.fit$coef[[2]]
+psi_hat_lin <- exp(lm.fit$coef[[1]])
+
+pander(c("Estimate of k" = k_hat_lin, "Estimate of psi" = psi_hat_lin))
+```
+
+We can visually check that the estimated regression coefficients are reasonably estimated by plotting the fitted regression line on top of the data:
+
+```{r echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
+ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  xlab("log(mean(Y))") +
+  ylab("log(var(Y))") +
+  ggtitle("log(var(Y)) against log(mean(Y))") +
+  theme_bw()
+```
+
+We see no warning signs from the plot and is fair to assume, that the value of $k$ and $\psi$ are descent estimates of the true values.
+
+## Fitting a Tweedie model to the data
+
+We proceed to fit a Tweedie model to the data. We use the `tweedie()` family specification from the `tweedie` package to fit the model with the estimated value of $k$ and `link.power = 0` for the log-link.
+
+```{r}
+tweedie.fit <- glm(Rain ~ Phase, data = Rain.data.comp, 
+                   family = tweedie(var.power = k_hat_lin, link.power = 0))
+pander(summary(tweedie.fit))
+```
+
+To interpret the model output we recall the five SOI levels
+
++ Phase 1: Consistently negative
++ Phase 2: Consistently positive
++ Phase 3: Rapidly falling
++ Phase 4: Rapidly rising
++ Phase 5: Consistently near zero
+
+Note that Phase1 is taken to be the reference phase. The model suggests that the rainfall for Phase 1 is significantly different from 0 with a point estimate of the average rainfall of 
+
+```{r echo = FALSE}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(1)))
+```
+
+millimeters in July. The model estimates that rainfall for Phase 2 is significantly different from the rainfall in Phase 1 with a point estimate of average rainfall of 
+
+```{r echo = FALSE}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(2)))
+```
+
+millimeters in July when SOI is in this phase. The model estimates that the rainfall for Phase 3 is not significantly different from the rainfall in Phase 1 with a point estimate of rainfall of
+
+```{r echo = FALSE}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(3)))
+```
+millimeters on average in July. The rainfall for Phase 4 is significantly different from the rainfall in Phase 1 according to the model with a point estimate of average rainfall of 
+
+```{r echo = FALSE}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(4)))
+```
+millimeters in July. The model estimates rainfall for Phase 5 to be borderline significantly different from rainfall in Phase 1 with a point estimate of average rainfall of 
+
+```{r echo = FALSE}
+predict(tweedie.fit, type = "response", newdata = data.frame(Phase = as.factor(5)))
+```
+
+millimeters in July. Hence, the model suggests that Phase 2 and Phase 4 leads to significantly more rain on average than Phase 1. Phase 2 and 4 are when the SOI is consistently positive and rapidly rising respectively. A bit less rain seem to fall on average in Phase 5 when the SOI is consistently near zero, while the model predicts least rain on average in SOI phases 1 and 3 which are estimated not to be significantly different.
+
+Note that the model predicts $\psi$ to be
+
+```{r}
+psi_hat_tweedie.fit <- summary(tweedie.fit)$dispersion
+psi_hat_tweedie.fit
+```
+
+which is slightly different from the result obtained from the linear regression where $\psi$ was estimated to be
+
+```{r}
+psi_hat_lin
+```
+
+
+## Estimating probability of zero rain in July
+We use the estimates obtained in the previous exercises to estimate the probability that it will not rain in July. In the theoretical exercises we derived the probability of zero rain to be
+
+$$ \mathbb{P}(Y = 0) = \exp(-\lambda^*) = \exp(-\frac{\mu^{2-k}}{\psi (2-k)}) $$
+
+With the two estimates of $\psi$ from the previous exercise, we compute two estimates of the the probability that it will not rain in July. We plug in the estimated values of $k$ and the empirical mean of our data:
+
+```{r}
+mu_hat <- mean(Rain.data.comp$Rain)
+
+exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_lin*(2 - k_hat_lin)))
+exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_tweedie.fit*(2 - k_hat_lin)))
+```
+
+The two results $34.1$ pct. and $35.5$ pct. are quite similar and compared to the empirical probability of zero rain in July
+
+```{r}
+sum(Rain.data.comp$Rain == 0)/nrow(Rain.data.comp)
+```
+
+we obtain three estimates that are all very similar. 
+
+
+## Determining k by minimizing AIC
+We now estimate $k$ by minimizing the Akaike Information Criterion (AIC) with a profile likelihood of a model with SOI phase as explanatory variable. That is, we search for the value of $k \in (1,2)$ that minimizes the AIC. We start by constructing a general profile likelihood function that takes inputs: A formula, a family, a data set and an evaluation metric that we wish to optimize.
+
+```{r}
+profile_likelihood <- function(form, family, data, eval) {
+  model <- glm(form, 
+               family = family, 
+               data = data)
+  eval_val <- eval(model)
+  return(eval_val)
+}
+```
+
+We define the specific profile likelihood that minimizes the AIC for different values of $k$ of a Tweedie exponential model with rainfall as response and SOI phase as covariate.  We specify `form = Rain ~ Phase`, `family = tweedie(var.power = k, link.power = 0)`, `data = Rain.data.comp` and `eval = AICtweedie`:
+
+```{r}
+tweedie.AIC_profile_likelihood <- function(k) {
+  profile_likelihood(form = Rain ~ Phase, 
+                         family = tweedie(var.power = k, link.power = 0), 
+                         data = Rain.data.comp,
+                         eval = AICtweedie)
+}
+```
+
+We use the `optimize` function to minimize the AIC and find the optimal value of $k$, where we search for $k$ in the range $(1.05, 1.95)$.
+
+```{r}
+k_hat_AIC <- optimize(tweedie.AIC_profile_likelihood, lower = 1.05, upper = 1.95)$minimum
+k_hat_AIC
+```
+
+We note that the optimal value of $k$ using the profile likelihood method is fairly close to the value of $k$ estimated by the linear model
+
+```{r}
+k_hat_lin
+```
+
+To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 6, fig.height = 5, fig.align = 'center'}
+k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
+
+k_hat_AIC_obj <- optimize(tweedie.AIC_profile_likelihood, lower = 1.05, upper = 1.95)$objective
+
+ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
+  geom_line() +
+  xlab("k") +
+  ylab("AIC") +
+  ggtitle("AIC against k") +
+  theme_bw() +
+  geom_vline(xintercept = k_hat_AIC, linetype = "dashed") +
+  geom_hline(yintercept = k_hat_AIC_obj, linetype = "dashed") +
+  geom_text(aes(x = k_hat_AIC + 0.01, y = 835, label = paste0("Optimal value of k at ", round(k_hat_AIC,3))),
+            hjust = 0, vjust = 0) +
+  geom_text(aes(x = 1.85, y = k_hat_AIC_obj + 20, label = paste0("Minimum AIC at ", round(k_hat_AIC_obj,3))))
+```
+The plot confirms, that `optimize()` has found the global minimum of the AIC for $1<k<2$. We repeat the calculations from the previous exercises using the optimal value of $k$ found by minimizing the profile likelihood.
+
+
+## Re-estimating with new value of k
+As before we initially fit a Tweedie model to the data using the optimal value of $k$ found by minimizing the AIC.
+
+```{r}
+tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp, 
+                       family = tweedie(var.power = k_hat_AIC, link.power = 0))
+pander(summary(tweedie.fit.AIC))
+```
+
+We note a slight decrease in the p-value for all the coefficients but otherwise the results are very similar to the previous model and the interpretation is the same. This is not surprising since the estimated value of $k$ from the AIC profile likelihood is close to the value of $k$ estimated by the linear model. The estimated dispersion parameter $\hat \psi_{k_{AIC}} = 7.740$ is slightly different from the previous Tweedie model estimate $\hat \psi_{k_{lin}} = 8.212$ and closer to the linear model estimate $\hat \psi = 7.905$.
+
+We recalculate the estimated probability that it will not rain in July. We plug in the estimated values of $k$ and $\psi$ and the empirical mean of our data we get the following estimate of the probability that it will not rain:
+
+```{r}
+psi_hat_model_AIC <- summary(tweedie.fit.AIC)$dispersion
+exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_lin*(2 - k_hat_AIC)))
+exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_model_AIC*(2 - k_hat_AIC)))
+```
+
+Again the estimates are similar to the estimates obtained from the previous estimate of $k$.
+
+
+## Model diagnostics
+We check the model assumptions for the two Tweedie models fitted in the previous exercise. First we construct a data frame with the relevant diagnostic information for both Tweedie models. We extract the fitted values, Pearson residuals and deviance residuals for both models and add the SOI phase as a variable to the data frame.
+
+```{r echo = FALSE}
+linmod_diag <- fortify(tweedie.fit)
+AIC_diag <- fortify(tweedie.fit.AIC)
+
+diag_df <- data.frame(linmod.fitted = linmod_diag$.fitted,
+                      linmod.pearson = residuals(tweedie.fit, type = "pearson"),
+                      linmod.deviance = residuals(tweedie.fit, type = "deviance"),
+                      AIC.fitted = AIC_diag$.fitted,
+                      AIC.pearson = residuals(tweedie.fit.AIC, type = "pearson"),
+                      AIC.deviance = residuals(tweedie.fit.AIC, type = "deviance"),
+                      SOI = Rain.data.comp$SOI)
+
+pander(summary(diag_df))
+```
+
+We then plot the residuals against the fitted values first for the linear model estimate of $k$ and then for the AIC estimate of $k$.
+
+
+### Linear model estimate of k
+
+```{r, warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+diag_lin_DR_fitted <- qplot(x = linmod.fitted, y = linmod.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_PR_fitted <- qplot(x = linmod.fitted, y = linmod.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Pearson residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_DR_SOI <- qplot(x = SOI, y = linmod.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_lin_PR_SOI <- qplot(x = SOI, y = linmod.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth(size = 1) +
+  xlab("SOI") +
+  ylab("Pearson residuals") +
+  ggtitle("Pearson residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+grid.arrange(diag_lin_DR_fitted, diag_lin_PR_fitted, diag_lin_DR_SOI, diag_lin_PR_SOI, ncol = 2,
+             top = textGrob(paste0("k = ", round(k_hat_lin, 3))))
+```
+From the plots there is no clear indication that the model is misspecified. The residuals appear to be randomly scattered around zero which indicates that the model captures the mean and variance structure of the data. We further evaluate the plots with bootstrapping. In particular we simulate data from the fitted model. That is, assuming data is from a Tweedie distribution with the estimated mean, dispersion parameter and $k$ we simulate new data and fit a Tweedie model to the new data. We then plot the residuals against the fitted values and the SOI phase for the new data. We hope to see, that the bootstrapped residuals are similar to the residuals from the original data.
+
+```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+set.seed(10102024)
+
+# Retrieve the estimated mean value of Y given the covariates
+linmu_hats <- predict(tweedie.fit, type = "response")
+
+# Use the estimated mean value of Y given the covariates, the estimate of k and the estimated dispersion parameter to simulate new data
+yNew1 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+yNew2 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+yNew3 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+yNew4 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+yNew5 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+yNew6 <- rTweedie(linmu_hats, psi_hat_tweedie.fit, p = k_hat_lin)
+simGlmNew1 <- glm(yNew1 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simGlmNew2 <- glm(yNew2 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simGlmNew3 <- glm(yNew3 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simGlmNew4 <- glm(yNew4 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simGlmNew5 <- glm(yNew5 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simGlmNew6 <- glm(yNew6 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_lin, link.power = 0))
+simDiagNew1 <- fortify(simGlmNew1)
+simDiagNew2 <- fortify(simGlmNew2)
+simDiagNew3 <- fortify(simGlmNew3)
+simDiagNew4 <- fortify(simGlmNew4)
+simDiagNew5 <- fortify(simGlmNew5)
+simDiagNew6 <- fortify(simGlmNew6)
+p1 <- qplot(.fitted, .resid, data = simDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+p2 <- qplot(.fitted, .resid, data = simDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+p3 <- qplot(.fitted, .resid, data = simDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+p4 <- qplot(.fitted, .resid, data = simDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+p5 <- qplot(.fitted, .resid, data = simDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+p6 <- qplot(.fitted, .resid, data = simDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
+```
+We see that the plots by and large resemble the residual plots of the original model. This supports the initial diagnostic plots. That is, there is no clear evidence that the model assumptions are violated.
+
+### AIC estimate of k
+
+```{r, warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+diag_AIC_DR_fitted <- qplot(x = AIC.fitted, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+
+diag_AIC_PR_fitted <- qplot(x = AIC.fitted, y = AIC.pearson, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("Fitted values") +
+  ylab("Deviance residuals") +
+  ggtitle("Pearson residuals against fitted values") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_AIC_DR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth() +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+diag_AIC_PR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
+  geom_point() +
+  geom_smooth(size = 1) +
+  xlab("SOI") +
+  ylab("Deviance residuals") +
+  ggtitle("Deviance residuals against SOI") +
+  theme_bw() +
+  theme(plot.title=element_text(size=10))
+
+grid.arrange(diag_AIC_DR_fitted, diag_AIC_PR_fitted, diag_AIC_DR_SOI, diag_AIC_PR_SOI, ncol = 2,
+             top = textGrob(paste0("k = ", round(k_hat_AIC, 3))))
+```
+
+We notice a similar pattern to the previous model.
+
+```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+set.seed(10102024)
+
+AICmu_hats <- predict(tweedie.fit.AIC, type = "response")
+
+AICyNew1 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew2 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew3 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew4 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew5 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICyNew6 <- rTweedie(AICmu_hats, psi_hat_model_AIC, p = k_hat_AIC)
+AICsimGlmNew1 <- glm(AICyNew1 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew2 <- glm(AICyNew2 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew3 <- glm(AICyNew3 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew4 <- glm(AICyNew4 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew5 <- glm(AICyNew5 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimGlmNew6 <- glm(AICyNew6 ~ Rain.data.comp$Phase, tweedie(var.power = k_hat_AIC, link.power = 0))
+AICsimDiagNew1 <- fortify(AICsimGlmNew1)
+AICsimDiagNew2 <- fortify(AICsimGlmNew2)
+AICsimDiagNew3 <- fortify(AICsimGlmNew3)
+AICsimDiagNew4 <- fortify(AICsimGlmNew4)
+AICsimDiagNew5 <- fortify(AICsimGlmNew5)
+AICsimDiagNew6 <- fortify(AICsimGlmNew6)
+AICp1 <- qplot(.fitted, .resid, data = AICsimDiagNew1) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+AICp2 <- qplot(.fitted, .resid, data = AICsimDiagNew2) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+AICp3 <- qplot(.fitted, .resid, data = AICsimDiagNew3) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+AICp4 <- qplot(.fitted, .resid, data = AICsimDiagNew4) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+AICp5 <- qplot(.fitted, .resid, data = AICsimDiagNew5) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+AICp6 <- qplot(.fitted, .resid, data = AICsimDiagNew6) + xlab("Fitted values") +
+  ylab("Deviance residuals") + geom_smooth() + theme_bw()
+
+grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
+             top = textGrob("Bootstrap deviance residual plots"))
+```
+The pattern appears to be similar to the previous model. There may be some signs in the second and fifth plot that the model fitted on the simulated data diverge slightly from the original model. It is difficult to say if this is just noise or if the second estimate of $k$ is worse that the first estimated $k$.
 
 
 
-
-
-
-
-
-It seems as if the missingness occurs for consecutive years. Other than that, there is no clear pattern. We have no idea of knowing why data is missing. It could be missing completely at random, at random or not at random. Quite unlikely somebody could have deleted all the large observations of rain fall, this would be missing not at random. Or, more likely, it could simply be that some years the data was not recorded for some reason. This would be missing at random. The fact that the missingness happens for years in a row supports the hypothesis of missing at random rather than completely at random. 
-
-We decide to do multiple imputations in order to account for the missingness. This procedure assumes missing at random. We perform multiple imputations in an attempt not to bias the results of our analysis. 
-
-The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
 

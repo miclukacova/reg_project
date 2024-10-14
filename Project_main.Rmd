@@ -10,20 +10,28 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r libraries}
+library(GLMsData)     # Project specific package
+library(statmod)      # Project specific package
+library(tweedie)      # Project specific package
+library(mgcv)         # Project specific package
+
+library(dplyr)        # For data manipulation
+library(reshape2)     # For data manipulation
+library(tidyverse)    # For data manipulation
+
+library(splines)      # For splines
+
 library(ggplot2)
 theme_set(theme_bw())
-library(gridExtra)
-library(tidyverse)
-library(splines)
+library(gridExtra)    # For arranging plots
+library(grid)         # For arranging plots
 
-# Assignment packages
-library(GLMsData)
-library(statmod)
-library(tweedie)
-library(mgcv)
+library(Hmisc)        # For multiple imputation
+library(mice)         # For multiple imputation
+library(sjmisc)       # For combining multiple imputation
 
-# Imputations
-library(mice)
+library(pander)       # For printing tables
+library(knitr)        # For printing tables
 ```
 
 # Rainfall and Southern Oscillation Index (SOI) data
@@ -48,57 +56,18 @@ We decide to do multiple imputations in order to account for the missingness. Th
 The multiple imputations are done with help of the aregImpute algorithm.  mice constructs multiple datasets with imputed values for the missing data and then combines the results. There is a certian randomness in each imputation so as not to artificially inflate the information in the data. Using multiple imputations gets rid of the arbitrariness of the imputation. We use the default method, which is predictive mean matching. We use 50 imputations, 50 iterations and a seed of 500.
 
 ```{r}
-Rain.data <- Rain.data[,c("Rain", "SOI", "Phase", "Year")]
-imputed_data <- mice(Rain.data, m = 1, maxit = 50, seed = 10102024, printFlag = FALSE)
+Rain.data.impute <- mice(Rain.data, method = "pmm", 
+                         m = 5, seed = 10102024,  
+                         printFlag = FALSE)
 
-complete_data <- complete(imputed_data)
-head(complete_data)
-
-
-# Perform multiple imputation
-Rain.data.imputed <- rain.data1
-Rain.data.imputed$imputed <- is.na(rain.data1$Rain)
-
-Rain.data.imputation.obj <- aregImpute(~ Year + Rain + SOI + Phase, 
-                                       data = Rain.data.imputed, 
-                                       n.impute = 5)
-
-imputed_datasets <- list()
+grouped_imputatations <- list()
 for (i in 1:5) {
-  imputed_datasets[[i]] <- as.data.frame(impute.transcan(
-    Rain.data.imputation.obj, 
-    imputation = i, 
-    data = Rain.data.imputed, 
-    list.out = TRUE, 
-    pr = FALSE))
+  grouped_imputatations[[i]] <- complete(Rain.data.impute, i) %>% group_by(Phase) %>% 
+    summarise(meanY = mean(Rain), varY = var(Rain))
 }
 
-mult_impute <- function(form, family){
-  glm_fits <- lapply(imputed_datasets, function(imp_data) {
-    glm(form, data = imp_data, family = family)
-    })
-  
-  pooled_results <- pool(glm_fits)
-  
-  return(pooled_results)
-}
-
-mult_impute(form = Rain ~ SOI, family = Gamma("log"))
-
-
-#glm_impute <- function(family, form){
-#  fit.mult.impute(form, 
-#                  family = family,
-#                  data = Rain.data, 
-#                  xtrans = Rain.data.imputation.obj$xtrans,
-#                  fitter = glm)
-#}
-#
-#glm_impute(family = "gaussian", form = Rain ~ SOI + Phase + Year)
-#fit.mult.impute( Rain ~ SOI + Phase + Year,
-#                  data = Rain.data, 
-#                  xtrans = Rain.data.imputation.obj$xtrans,
-#                  fitter = lrm)
+complete_data <- Rain.data %>% 
+  mutate(Rain = merge_imputations(Rain.data, Rain.data.impute)$Rain)
 ```
 
 
@@ -168,13 +137,12 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
   ggtitle("Rain against SOI")
 
 ```
-There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. 
+There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $, which also seems like a good fit from the plot above. 
 
-The Gamma exponential dispersion model has the variance structure $\mathcal{V} (\mu) = \mu^2 $. If we choose the log link function we fit the log of the mean of the response variables as a linear combination of the predictors. If we choose the identity link function we fit the mean of the response variables as a linear combination of the predictors. A third option is the canonical link, which is the inverse function. We fit all three models.
+If we choose the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for the rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
 
 ```{r}
 glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
-glm_gamma_id <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("identity"))
 glm_gamma_inv <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
 ```
 
@@ -182,17 +150,15 @@ Below we calculate the training error based on the squared deviance loss functio
 
 ```{r}
 tibble(
-  "Link function" = c("Log", "Identity", "Inverse"),
+  "Link function" = c("Log", "Inverse"),
   "Training error" = c(mean(residuals(glm_gamma_log, type = "deviance")^2), 
-                       mean(residuals(glm_gamma_id, type = "deviance")^2), 
                        mean(residuals(glm_gamma_inv, type = "deviance")^2))
-)
+) %>% pander()
 ```
-The identity link function seems to be the best fit in terms of training error. *Det er lidt mærkeligt, for selvom det virker til at identity linket er det bedste fit, så har vi svært ved at fitte den senere?*. We plot the model fits
+The log link function seems to be the best fit in terms of training error. We plot the model fits:
 
 ```{r}
 log_pred <- predict(glm_gamma_log, newdata = rain.data1, type = "response")
-id_pred <- predict(glm_gamma_id, newdata = rain.data1, type = "response")
 inv_pred <- predict(glm_gamma_inv, newdata = rain.data1, type = "response")
 
 grid.arrange(
@@ -202,11 +168,6 @@ grid.arrange(
     ylab("Rain")+
     ggtitle("Log link function"),
    qplot(rain.data1$SOI, rain.data1$Rain) + 
-    geom_line(aes(y = id_pred), color = "red") +
-    xlab("SOI") +
-    ylab("Rain") +
-    ggtitle("Identity link function"),
-   qplot(rain.data1$SOI, rain.data1$Rain) + 
     geom_line(aes(y = inv_pred), color = "red") +
     xlab("SOI") +
     ylab("Rain") +
@@ -214,10 +175,9 @@ grid.arrange(
   nrow = 1
 )
 ```
+The Gamma model with alog link function seems to fit data reasonably well. We choose to proceed with the Gamma model and the log link function. 
 
-*We can see that they all resemble the deviance residuals we had from before. There is something wrong here (??)*
-
-### Should we include additional predictors
+### Should we include additional predictors?
 
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT")
@@ -287,15 +247,13 @@ grid.arrange(
     ggtitle("Df = 6"),
   nrow = 2
 )
-````
+```
 
-We do cross-validation to compare the four models. We first define the error function. We use
+Adding more degrees of freedom to the natural cubic splines adds flexibility to the model, allowing it to fit data better. This comes at the expense of potentially overfitting. The model fitted with 6 degress of freedom is quite likely overfitting data. But in order to better assess which model is the best in terms of prediction, we do cross-validation to compare the models. We first define the error function. We use the deviance loss function.
 
 ```{r}
 # Error function
-squared_loss <- function(Y, muhat) mean(Y - muhat)^2
-dev_func <- function(Y, muhat) 2 * (Y * (log(Y) - log(muhat)) +
-                                    log(log(Y)/log(muhat)))
+dev_loss <- function(Y, muhat) 2 * (log(muhat / Y) + Y / muhat - 1)
 ```
 
 The cross validation function:
@@ -320,34 +278,34 @@ cv <- function(data, form, B = 1, k = 8, my_family, error_func){
 }
 ```
 
-Cross validation:
+Since the data set is quite small, we perform LOOCV. Since this is a non random procedure $B$ is set to $1$.
 
 ```{r}
 cv(data = rain.data1, form = form1, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 
 cv(data = rain.data1, form = form2, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 
 cv(data = rain.data1, form = form3, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 
 cv(data = rain.data1, form = form4, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 
 cv(data = rain.data1, form = form5, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 
 cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1), 
    my_family = Gamma("log"), 
-   error_func = squared_loss)
+   error_func = dev_loss)
 ```
-*Jeg har lidt problemer med at bruge deviance loss*. We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. 
+We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model with 1 degree of freedom is very close to performind just as well in terms of generalization error. 
 
 ### Model Diagnostics
 
@@ -364,38 +322,90 @@ glm_gamma.obj <- transform(
 )
 
 grid.arrange(
-  qplot(.fitted, .deviance, data = glm_gamma.obj) + geom_smooth(se = FALSE),
-  qplot(.fitted, .pearson, data = glm_gamma.obj) + geom_smooth(se = FALSE),
-  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + geom_smooth(se = FALSE),
+  qplot(.fitted, .deviance, data = glm_gamma.obj) + geom_smooth(),
+  qplot(.fitted, .pearson, data = glm_gamma.obj) + geom_smooth(),
+  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + geom_smooth(),
   ncol=3
 )
 ```
 
-Looks good. We can see that there is no clear evidence against the model assumptions. We can evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
+The model diagnostics look quite good. There is no clear evidence against the model assumptions. We evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
 
 ```{r}
-res_plots <- list()
+set.seed(1986234)
+glm_list <- list()
 for(i in 1:6){
-  print(i)
   sim_data <- simulate(mod_final)[,1]
-  simGlm <- glm(sim_data ~ rain.data1$SOI, family = Gamma(link = "log"))
-  res_plots[[i]] <- qplot(fitted(simGlm), residuals(simGlm, type = "deviance")) + 
-    xlab("Fitted values") +
-    ylab("Deviance residuals") +
-    geom_smooth()
+  glm_list[[i]] <- glm(sim_data ~ ns(rain.data1$SOI, df = 2),
+                       family = Gamma(link = "log"))
 }
 
-grid.arrange(res_plots[[1]], res_plots[[2]], res_plots[[3]], res_plots[[4]],
-              res_plots[[5]], res_plots[[6]], ncol = 3)
+grid.arrange(
+  qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[2]]), residuals(glm_list[[2]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[3]]), residuals(glm_list[[3]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[4]]), residuals(glm_list[[4]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+   qplot(fitted(glm_list[[5]]), residuals(glm_list[[5]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[6]]), residuals(glm_list[[6]], type = "deviance")) + 
+    xlab("Fitted values") +
+    ylab("Deviance residuals") +
+    geom_smooth(),
+  ncol = 3
+)
+
+grid.arrange(
+  qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[2]]), residuals(glm_list[[2]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[3]]), residuals(glm_list[[3]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[4]]), residuals(glm_list[[4]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+   qplot(fitted(glm_list[[5]]), residuals(glm_list[[5]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  qplot(fitted(glm_list[[6]]), residuals(glm_list[[6]], type = "pearson")) + 
+    xlab("Fitted values") +
+    ylab("Pearson residuals") +
+    geom_smooth(),
+  ncol = 3
+)
 
 ```
-*Der er noget som går galt her...*. 
+The bootstrapped residual plots resemble the original residual plots sufficiently well. This indicates that the fitted model is correct.
 
 ### Report a final model
 
 Final model fit
 
 ```{r}
+pred2 <- predict(mod_final, newdata = rain.data1, type = "response")
+
 qplot(rain.data1$SOI, rain.data1$Rain) + 
   geom_line(aes(y = pred2), color = "red") +
   xlab("SOI") +
@@ -407,17 +417,6 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
 
 ```{r}
 summary(mod_final)
-```
-
-
-## Model with Tweedie
-
-jeg ved ikke lige helt hvad man gør her... vi kender jeg ikke k hvis det er for soi? og der er vel ikke en nem måde at estimere det på?
-
-```{r}
-tweedie.fit <- glm(Rain ~ SOI, 
-                   data = complete_data, 
-                   family = tweedie(var.power = k_hat, link.power = 0))
 ```
 
 

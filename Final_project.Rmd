@@ -41,6 +41,8 @@ library(knitr)        # For printing tables
 
 In this project we seek to predict the rainfall at Eromanga in Queensland, Australia, during the month of July. We consider a data set that contains total rainfall in July at Eromanga in the period 1905 to 2024 with the exception of a few years. In addition we have measurements of the southern oscillation index (SOI, the standardized difference between the air pressures at Darwin and Haiti, related to el niño) for the same years. The hypothesis is that the SOI is related to the rainfall in Eromanga. We will throughout the project investigate this hypothesis and ultimately use the SOI index to predict the rainfall in Eromanga.
 
+To increase readability we have omitted code chunks on several occasions. In particular when it comes to plots and other standard code parts. When the code and output is more involved and essential for the analysis and understanding of the project we have included it in the project. If anything is unclear all code can be accessed at https://github.com/miclukacova/reg_project.
+
 # Exploratory data analysis
 
 First, we load the data set
@@ -53,7 +55,7 @@ Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("in
 
 We specify the column classes and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
 
-```{r}
+```{r, echo = FALSE}
 head(Rain.data)
 summary(Rain.data)
 ```
@@ -434,7 +436,7 @@ We note that the optimal value of $k$ using the profile likelihood method is fai
 k_hat_lin
 ```
 
-To ensure, that we have in fact found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
+To ensure, that we have found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
 
 ```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 6, fig.height = 5, fig.align = 'center'}
 k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
@@ -541,6 +543,7 @@ diag_lin_PR_SOI <- qplot(x = SOI, y = linmod.pearson, data = diag_df) +
 grid.arrange(diag_lin_DR_fitted, diag_lin_PR_fitted, diag_lin_DR_SOI, diag_lin_PR_SOI, ncol = 2,
              top = textGrob(paste0("k = ", round(k_hat_lin, 3))))
 ```
+
 From the plots there is no clear indication that the model is misspecified. The residuals appear to be randomly scattered around zero which indicates that the model captures the mean and variance structure of the data. We further evaluate the plots with bootstrapping. In particular we simulate data from the fitted model. That is, assuming data is from a Tweedie distribution with the estimated mean, dispersion parameter and $k$ we simulate new data and fit a Tweedie model to the new data. We then plot the residuals against the fitted values and the SOI phase for the new data. We hope to see, that the bootstrapped residuals are similar to the residuals from the original data.
 
 ```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
@@ -630,7 +633,7 @@ grid.arrange(diag_AIC_DR_fitted, diag_AIC_PR_fitted, diag_AIC_DR_SOI, diag_AIC_P
              top = textGrob(paste0("k = ", round(k_hat_AIC, 3))))
 ```
 
-We notice a similar pattern to the previous model.
+We notice a pattern similar to the previous model.
 
 ```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 set.seed(10102024)
@@ -671,11 +674,131 @@ AICp6 <- qplot(.fitted, .resid, data = AICsimDiagNew6) + xlab("Fitted values") +
 grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
              top = textGrob("Bootstrap deviance residual plots"))
 ```
-The pattern appears to be similar to the previous model. There may be some signs in the second and fifth plot that the model fitted on the simulated data diverge slightly from the original model. It is difficult to say if this is just noise or if the second estimate of $k$ is worse that the first estimated $k$.
+
+Again the pattern appears to be similar to the previous model. There may be concerns in the second and fifth plot where the model residuals from the simulated data diverge slightly from the original model. It is difficult to say if this is just noise or if the second estimate of $k$ is worse that the first estimated $k$.
+
+## Conclusion
+The above analysis suggest there is an association between rainfall and SOI phase. This hypothesis was visible from the boxplot of rainfall and SOI phase in the EDA and was further supported by the models in the subsequent analysis. Given the model diagnostics it appears that both fitted models capture the mean and variance structure of the data and we it is therefore can therefore trust the model conclusions. We have not tested the distributional assumptions of the model and the reported standard error of the model estimates are therefore therefore not to be trusted yet.
+
+
+## Bootstrap estimates of k
+
+We conclude this part of the analysis with parametric bootstrap to estimate the sampling distribution of $k$. We use parameters estimated by a Tweedie model to simulate new data from a Tweedie distribution and fit a new Tweedie model to the simulated data to estimate $k$. We repeat this process a number of times to estimate the sampling distribution of $k$. To carry out the parametric bootstrap we need the strong distributional assumptions GA3 and A5. We have not formally tested the validity of these assumptions, so further work should look into these assumptions. For now we should keep in mind, that the parametric bootstrap may result in too narrow confidence intervals.
+
+We try to estimate the sampling distribution of $k$ using both the AIC method and the linear model method as previous. Due to the small number of observations in phase 3 there is a high probability, that some bootstrap samples will contain only zeros for phase 3. This will cause the linear model method to fail, as the mean and variance in this group will be zero and taking the log of these values produces NAs. For the AIC method the fitted model used in the profile-likelihood will fail to converge for these bootstrap samples. We therefore need to guard ourselves against these cases. We have decided to add a small random value to the zeros in a group, in case they are all zeros. This will likely introduce a bit of bias to the results but alternatively we can not use the approach at all or the estimates we get comes from an algorithm that has not converged, hence the estimates are meaningless.
+
+We first use the linear model method:
+
+```{r}
+set.seed(10102024)
+B <- 1000
+parametric_k_LIN <- numeric(B)
+rain_data_LIN_sample <- Rain.data.comp
+
+for (b in 1:B){
+  # Simulating tweedie random variables using the estimates linmu_hats from
+  # the tweedie model with the linear model estimate of k
+  rain_data_LIN_sample$Rain <- rTweedie(linmu_hats, 
+                                        psi_hat_tweedie.fit, 
+                                        p = k_hat_lin)
+  
+  # Calculate sum for each phase in order to handle zeros
+  rain_data_LIN_sample <- rain_data_LIN_sample %>%
+    group_by(Phase) %>%
+    mutate(phase_sum = sum(Rain)) %>%
+    ungroup()
+    
+  # Add small (random) constant to phases where sum of Rain is zero to avoid log(0)
+  rain_data_LIN_sample <- rain_data_LIN_sample %>%
+    mutate(Rain = if_else(phase_sum == 0,
+                          Rain + abs(rnorm(n(), 0.0001, 0.001)),
+                          Rain))
+
+  # Calculate mean and variance for each phase
+  rain_data_LIN_sample.grp <- rain_data_LIN_sample %>% 
+    group_by(Phase) %>% 
+    summarise(meanY = mean(Rain), varY = var(Rain))
+
+  
+  # Fit linear model to log-transformed data
+  LINBootstrapLM <- lm(log(varY) ~ log(meanY), data = rain_data_LIN_sample.grp)
+  
+  parametric_k_LIN[b] <- coef(LINBootstrapLM)[2]
+}
+```
+
+```{r}
+set.seed(10102024)
+parametric_k_AIC <- numeric(B)
+rain_data_AIC_sample <- Rain.data.comp
+
+
+for (b in 1:B){
+  rain_data_AIC_sample$Rain <- rTweedie(AICmu_hats, 
+                                        psi_hat_model_AIC, 
+                                        p = k_hat_AIC)
+  
+  
+  # Calculate sum for each phase in order to handle zeros
+  rain_data_AIC_sample <- rain_data_AIC_sample %>%
+    group_by(Phase) %>%
+    mutate(phase_sum = sum(Rain)) %>%
+    ungroup()
+
+  # Add small constant to phases where sum of Rain is zero to ensure convergence 
+  rain_data_AIC_sample <- rain_data_AIC_sample %>%
+    mutate(Rain = if_else(phase_sum == 0,
+                          Rain + abs(rnorm(n(), 0.0001, 0.001)),
+                          Rain))
+
+  tweedieBootstrap.AIC_profile_likelihood <- function(k) {
+    profile_likelihood(form = Rain ~ Phase, 
+                       family = tweedie(var.power = k, link.power = 0), 
+                       data = rain_data_AIC_sample,
+                       eval = AICtweedie)
+  }
+  
+  boot_k_hat <- optimize(tweedieBootstrap.AIC_profile_likelihood, 
+                         lower = 1.1, upper = 1.9)$minimum
+  
+  parametric_k_AIC[b] <- boot_k_hat
+}
+```
+
+
+
+```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+violin_df <- data.frame(k = c(parametric_k_LIN, parametric_k_AIC),
+                        method = as.factor(rep(c("Linear model", "AIC"), each = B)))
+
+ggplot(violin_df, aes(x = method, y = k)) +
+  geom_violin(fill = I(gray(0.8))) + xlab("") +
+  facet_wrap(~ method, scale = "free_x", ncol = 2) + theme_bw() +
+  geom_hline(yintercept = k_hat_lin, color = "blue", linetype = "dashed") +
+  geom_hline(yintercept = k_hat_AIC, color = "red", linetype = "dashed") +
+  annotate("text", x = 1, y = k_hat_lin - 0.08, 
+           label = "Linear model estimate of k", 
+           color = "blue", vjust = -0.5) +
+  annotate("text", x = 1, y = k_hat_AIC + 0.03, 
+           label = "AIC estimate of k", color = "red", vjust = -0.5)
+```
+
+It appears that the AIC method is more robust than the linear model method. The AIC method has a smaller variance and is closer to the value of $k$ estimated on the real data. The spike on both plots come from the few bootstrap samples where phase 3 has only zero observations. We use the parametric AIC bootstrap to estimate the standard error of the AIC estimate of $k$:
+
+```{r}
+se_AIC <- sd(parametric_k_AIC)
+se_AIC
+```
+
+```{r}
+k_hat_AIC + c(-1, 1) * 1.96 * se_AIC
+```
+
+To conclude, it appears the the AIC profile likelihood method is a more robust method of estimating $k$ that the linear model approach. The AIC estimate of $k$ is $1.42$ with standard error $0.07$ and a parametric bootstrap confidence interval of $(1.28, 1.57)$.
 
 # Analysis using SOI directly
 
-We choose to model the rain fall conditionally on having rained. To do this we first filter out the observations where the rain fall is zero. 
+We choose to model the rainfall conditionally on having rained. To do this we first filter out the observations where the rainfall is zero. 
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE}
 rain.data1 <- Rain.data.comp %>%

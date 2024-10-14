@@ -565,8 +565,8 @@ plot(1:B, parametric_k_AIC)
 
 
 ```{r}
-set.seed(10122024)
-B <- 1000
+#set.seed(10122024)
+B <- 100
 
 #sample_index <- sample(120, 500, replace = T)
 parametric_k_LIN <- numeric(B)

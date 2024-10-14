@@ -48,9 +48,9 @@ To increase readability we have omitted code chunks on several occasions. In par
 First, we load the data set
 
 ```{r}
-#Rain.data = read.table("~/Desktop/Studie/Master/First year/Block 1/Regression/Project/RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
-
-Rain.data = read.table("RaindataEromanga.txt", header = TRUE, colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
+Rain.data = read.table("RaindataEromanga.txt", 
+                       header = TRUE, 
+                       colClasses = c("integer", "numeric", "integer", "numeric", "factor"))
 ```
 
 We specify the column classes and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.

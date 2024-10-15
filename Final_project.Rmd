@@ -138,8 +138,17 @@ ggplot(mSOI,
   facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
 
-Since the two predictors are collinear to some extent we will be careful, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing exact values of SOI, `Phase` contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not so it could still be valuable to include both variables in a model. We will go into further details on this matter in subsequent sections.
+Since the two predictors are collinear to some extent we will be careful, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing exact values of SOI, `Phase` contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not, so it could still be valuable to include both variables in a model. We will go into further details on this matter in subsequent sections.
 
+The last two variables for which we have not checked the correlation are the variables `Year` and `Phase`. Since `Phase` is categorical and `Year` ordinal, there is no suitable substitute for the Pearson correlation. We plot the two variables against each other
+```{r}
+ggplot(Rain.data, aes(x = Year, y = as.numeric(Phase))) +
+  geom_point()+
+  xlab("Year") +
+  ylab("Phase") +
+  theme_bw()
+```
+The plot does not suggest any dependence between `Year` and `Phase`. 
 
 ## Missing data
 With a better understanding of the data we proceed to investigate and handle the missing data. As noted previously the only missing data is in the response variable `Rain` (7.5 pct. missing).
@@ -168,7 +177,7 @@ grid.arrange(
 
 Given the modest number of missing observations, it is difficult to identify any clear trends in the missingness. We note that the missingness occurs in consecutive years (except 1933), but there are no distinct pattern beyond that. Without metadata and additional knowledge we are unable to determine if the data is missing completely at random (MCAR), at random (MAR) or not at random (MNAR). It seems unlikely that observations of large rainfall were selectively deleted or that someone was too lazy to record rainfall during heavy rainfalls. A more plausible explanation, given the consecutive years, is that the equipment may be broken for consecutive years or there was a lack of funding these years. The latter explanations would imply that the data is MCAR which implies MAR and we therefore choose to adopt this assumption.
 
-Assuming MAR we can use multiple imputation to impute the missing data. If the MAR assumption holds the imputed values are unbiased and the variation in the data set is preserved. We use the `mice()` function (multiple imputations using chained equations) from the package `mice` to perform the multiple imputations. This procedure use random draws from the conditional distribution of the target variable given the other variables. That is, we take a bootstrap sample from our data and fit a regression model to this sample to predict the missing values. We use _predictive mean matching_ (PMM) to replace the missing values in each imputed data set. This method uses the value of a donor observation to fill in the missing values. The donors are identified by matching the predicted value of the target to the donor value. PMM does not require any distributional assumptions and is therefore fairly robust to different types of data (F. E. Harell, Jr., 2015). 
+Assuming MAR we can use multiple imputation to impute the missing data. If the MAR assumption holds the imputed values are unbiased and the variation in the data set is preserved. We use the `mice()` function (multiple imputations using chained equations) from the package `mice` to perform the multiple imputations. This procedure uses random draws from the conditional distribution of the target variable given the other variables. That is, we take a bootstrap sample from our data and fit a regression model to this sample to predict the missing values. We use _predictive mean matching_ (PMM) to replace the missing values in each imputed data set. This method uses the value of a donor observation to fill in the missing values. The donors are identified by matching the predicted value of the target to the donor value. PMM does not require any distributional assumptions and is therefore fairly robust to different types of data (F. E. Harell, Jr., 2015). 
 
 We run the imputations and display the first five rows of the first two imputed data sets:
 
@@ -204,7 +213,7 @@ We note that the densities for all the imputed data sets look very similar to th
 
 
 # Analysis using SOI phase
-In the following part of the project we seek to fit the Tweedie exponential dispersion model to the Eromanga rain data, and predict rainfall as a function of the SOI phase. To fit a Tweedie model to we need to estimate the nuisance parameter $k$ assumed to be between 1 and 2. 
+In the following part of the project we seek to fit the Tweedie exponential dispersion model to the Eromanga rain data, and predict rainfall as a function of the SOI phase. To fit a Tweedie model we need to estimate the nuisance parameter $k$ assumed to be between 1 and 2. 
 
 
 ## Estimating k with a linear regression model
@@ -291,7 +300,7 @@ ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   theme_bw()
 ```
 
-We see no warning signs from the plot so is seems fair to assume, that the estimated values of $k$ and $\psi$ are descent initial estimates of the true values.
+We see no warning signs from the plot so is seems fair to assume, that the estimated values of $k$ and $\psi$ are decent initial estimates of the true values.
 
 ## Fitting a Tweedie model to the data
 
@@ -315,7 +324,7 @@ To interpret the model output we recall the five SOI levels
 + Phase 4: Rapidly rising
 + Phase 5: Consistently near zero
 
-Note that Phase1 is the reference phase (Intercept). The model suggests that the rainfall for Phase 1 is significantly different from 0 with a point estimate of the average rainfall of 
+Note that Phase 1 is the reference phase (Intercept). The model suggests that the rainfall for Phase 1 is significantly different from 0 with a point estimate of the average rainfall of 
 ```{r echo = FALSE}
 pander(round(tweedie.fit.pred[[1]], 3))
 ```
@@ -725,6 +734,7 @@ and the lower and upper bounds of the 95% confidence interval are
 pander(k_hat_AIC + c(-1, 1) * 1.96 * se_AIC)
 ```
 
+\newpage
 
 # Analysis using SOI directly
 
@@ -735,7 +745,7 @@ rain.data1 <- Rain.data.comp %>%
   filter(Rain != 0)
 ```
 
-We look at the distribution of the rain fall. 
+We look at the distribution of `Rain`.
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 ggplot(data = rain.data1, aes(x = Rain)) +
@@ -743,8 +753,9 @@ ggplot(data = rain.data1, aes(x = Rain)) +
   xlab("Rain") +
   ylab("Density") +
   ggtitle("Rain fall distribution")
+  
 ```
-The distribution is still very right skewed. This motivates the Gamma exponential dispersion model, which is typically used to fit positive continous right skewed data. Consider now the rain fall as a function of the SOI. 
+The distribution is still very right skewed. This motivates the Gamma exponential dispersion model, which is typically used to fit positive continuous right skewed data. Consider now `Rain` plotted against `SOI`. 
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 # Plot rain against year using ggplot
@@ -756,16 +767,16 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
   ggtitle("Rain against SOI")
 
 ```
-There seems to be a positive relationship between the SOI and the rain fall. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has a quadratic mean variance relationsship, which also seems like a good fit from the plot above. 
+There seems to be a positive relationship between `SOI` and `Rain`. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has a quadratic mean variance relationship, which also seems like a good fit from the plot above. There are a few observations with very large values of `Rain`, but none of which appear extreme enough to be considered outliers.
 
-If we choose the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for the rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
+A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
 
 ```{r}
 glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
 glm_gamma_inv <- glm(Rain ~ SOI, data = rain.data1, family = Gamma)
 ```
 
-Below we calculate the training error based on the squared deviance loss function. 
+Since the models have the same complexity, we can compare them using the training error. The training error based on the squared deviance loss function for the two models is
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 tibble(
@@ -774,7 +785,7 @@ tibble(
                        mean(residuals(glm_gamma_inv, type = "deviance")^2))
 ) %>% pander()
 ```
-The log link function seems to be the best fit in terms of training error. We plot the model fits:
+The log link function seems to be the best fit in terms of training error. We plot the model fits
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 log_pred <- predict(glm_gamma_log, newdata = rain.data1, type = "response")
@@ -794,11 +805,11 @@ grid.arrange(
   nrow = 1
 )
 ```
-The Gamma model with log link function seems to fit data reasonably well. We choose to proceed with the Gamma model rather than the log link function. 
+The Gamma model with log link function seems to fit data reasonably well. We choose to proceed with the Gamma model with the log link rather than the inverse link function. 
 
-## Should we include additional predictors?
+## Should additional predictors be included?
 
-We perform an LRT test to see if we should include additional predictors. We consider to add the predictors Phase and Year. As mentioned in the EDA, Phase and SOI are very correlated, and it could be problematic to include both in the model.  
+We perform an LRT test to see whether or not we should include additional predictors. We consider to add the predictors `Phase` and `Year.` As mentioned in the EDA, `Phase` and `SOI` are correlated, and it could be problematic to include both in the model. But as discussed in the EDA, `Phase` contains information that `SOI` does not, meaning that the variable could potentially improve our predictions. 
 
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
@@ -901,38 +912,36 @@ cv <- function(data, form, B = 1, k = 8, my_family, error_func){
 
 Since the data set is quite small, we perform LOOCV. This is a non random procedure and we therefore set $B = 1$.
 
-```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-cv(data = rain.data1, form = form1, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
-
-cv(data = rain.data1, form = form2, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
-
-cv(data = rain.data1, form = form3, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
-
-cv(data = rain.data1, form = form4, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
-
-cv(data = rain.data1, form = form5, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
-
-cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1), 
-   my_family = Gamma("log"), 
-   error_func = dev_loss)
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+tibble("Df."= seq(1,6), 
+       "Generalization error" = c(
+          cv(data = rain.data1, form = form1, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss),
+          cv(data = rain.data1, form = form2, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss),
+          cv(data = rain.data1, form = form3, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss),
+          cv(data = rain.data1, form = form4, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss),
+          cv(data = rain.data1, form = form5, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss),
+          cv(data = rain.data1, form = form6, B = 1, k = nrow(rain.data1), 
+             my_family = Gamma("log"), 
+             error_func = dev_loss))
+) %>% pander()
 ```
-We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model without natural cubic splines is very close to performing just as well in terms of generalization error. Since we are interested in prediction, we choose the model with 2 degrees of freedom. If interpretability was of higher priority we would choose the model without natural cubic splines. 
+We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model without natural cubic splines is very close to performing just as well in terms of generalization error. Since we are interested in prediction, we choose the model with 2 degrees of freedom. If interpretability was of higher priority, we would choose the model without natural cubic splines. 
 
 ## Model Diagnostics
 
 We do model diagnostics for the chosen model. 
 
-```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 mod_final <- glm(form2, data = rain.data1, family = Gamma("log"))
 
 glm_gamma.obj <- transform(
@@ -943,14 +952,20 @@ glm_gamma.obj <- transform(
 )
 
 grid.arrange(
-  qplot(.fitted, .deviance, data = glm_gamma.obj) + geom_smooth(),
-  qplot(.fitted, .pearson, data = glm_gamma.obj) + geom_smooth(),
-  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + geom_smooth(),
+  qplot(.fitted, .deviance, data = glm_gamma.obj) + 
+    geom_smooth() + xlab("Fitted values") +
+    ylab("Deviance residuals"),
+  qplot(.fitted, .pearson, data = glm_gamma.obj) + 
+    geom_smooth() + xlab("Fitted values") +
+    ylab("Pearson residuals"),
+  qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + 
+    geom_smooth() + xlab("Fitted values") +
+    ylab("Square root of Pearson residuals"),
   ncol=3
 )
 ```
 
-The model diagnostics look quite good. There is no clear evidence against the model assumptions. We evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct.
+From the plots we see no clear evidence against model assumptions. The residuals have approximately mean zero and equal variance. There are a few large residuals, but they are not alarming. We evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values and the Pearson residuals against fitted values for each bootstrap sample. 
 
 ```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 set.seed(1986234)
@@ -960,7 +975,10 @@ for(i in 1:6){
   glm_list[[i]] <- glm(sim_data ~ ns(rain.data1$SOI, df = 2),
                        family = Gamma(link = "log"))
 }
+```
 
+The bootstrapped deviance residual plots 
+```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 grid.arrange(
   qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "deviance")) + 
     xlab("Fitted values") +
@@ -988,7 +1006,10 @@ grid.arrange(
     geom_smooth(),
   ncol = 3
 )
+```
 
+The bootstrapped Pearson residual plots
+```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 grid.arrange(
   qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "pearson")) + 
     xlab("Fitted values") +
@@ -1016,19 +1037,18 @@ grid.arrange(
     geom_smooth(),
   ncol = 3
 )
-
 ```
-The bootstrapped residual plots resemble the original residual plots sufficiently well. This indicates that the fitted model is correct.
+The bootstrapped residual plots resemble the original residual plots well. This indicates that the fitted model is correct. A thing to note is that the few large residuals that we observed in the original residual plots are also present in the bootstrapped plots. 
 
 ## Reporting a final model and interpretation
 
-The final model fit
+The summary of our final model
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-summary(mod_final)
+summary(mod_final) %>% pander()
 ```
 
-We see that SOI is a significant predictor of rain fall. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. Below the model predictions for a few values of SOI are printed
+From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. Below the model predictions for a few values of SOI are printed
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 tibble(
@@ -1052,7 +1072,7 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
 
 The fitted model predicts that rainfall is increasing as a function of SOI. The slope of the model is largest for values of SOI between $-10$ and $10$. For SOI values that are larger or smaller than this, the model is more constant. 
 
-We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model predictions as described on page 220. 
+We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model predictions as described on page 220. The code used for the pair sampling can be seen below
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 # Pair sampling
@@ -1085,7 +1105,7 @@ p1 <- qplot(rain.data1$SOI, rain.data1$Rain) +
 We will further construct confidence intervals of the form
 
 $$
-f \pm 1.96 \hat{\text{se}} 
+\hat{f} \pm 1.96 \hat{\text{se}} 
 $$
 Note that these intervals will be symmetric around the point estimate. First we will use residual sampling to estimate standard errors of the model predictions and use these to construct the confidence interval. 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'} 
@@ -1138,7 +1158,7 @@ We will now compare the three confidence intervals.
 grid.arrange(p1, p2, p3, nrow = 1)
 ```
 
-The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is very very narrow, which seems very unlikely. Apart from that we see that the two other confidence interval are narrow for the SOI values where we have many observations and wide for the SOI values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
+The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is very very narrow, which seems very unlikely. Apart from this, we see that the two other confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
 
 ## Conclusion
 
@@ -1148,6 +1168,6 @@ The model we have fitted is a Gamma model with a log link function and a natural
 
 The model is well fitted to the data and the residuals show no evidence against the model assumptions. 
 
-The model predicts that rain fall is increasing as a function of SOI, and that SOI is a significant predictor of rain fall. We have constructed confidence intervals for the model predictions, which show that the model is most certain for SOI values where we have many observations, and less certain for SOI values where we have few observations.
+According to the model `SOI` is a significant predictor of `Rain`. The model predicts that `Rain` is increasing as a function of `SOI`. We have constructed confidence intervals for the model predictions, which show that the model is most certain for `SOI` values for which we have many observations, and less certain for `SOI` values where we have few observations.
 
 

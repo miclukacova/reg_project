@@ -738,7 +738,10 @@ pander(k_hat_AIC + c(-1, 1) * 1.96 * se_AIC)
 
 # Analysis using SOI directly
 
-We choose to model the rainfall conditionally on having rained. To do this we first filter out the observations where the rainfall is zero. 
+
+We choose to model the rainfall conditionally on having rained. While a Tweedie model could incorporate observations with zero rainfall, this model is not directly comparable to one excluding zero rainfall so to simplify the following analysis and avoid repetition, we chose the latter model. In a more comprehensive analysis, both models should be considered, along with a method for comparing them. 
+
+We filter out observations where the rainfall is zero:
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE}
 rain.data1 <- Rain.data.comp %>%
@@ -752,10 +755,11 @@ ggplot(data = rain.data1, aes(x = Rain)) +
   geom_density(fill = gray(0.5)) +
   xlab("Rain") +
   ylab("Density") +
-  ggtitle("Rain fall distribution")
+  ggtitle("Rainfall distribution")
   
 ```
-The distribution is still very right skewed. This motivates the Gamma exponential dispersion model, which is typically used to fit positive continuous right skewed data. Consider now `Rain` plotted against `SOI`. 
+
+The distribution remains highly right skewed. Consider now `Rain` plotted against `SOI`. 
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 # Plot rain against year using ggplot
@@ -767,9 +771,9 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
   ggtitle("Rain against SOI")
 
 ```
-There seems to be a positive relationship between `SOI` and `Rain`. The plot also indicates a possibility of non linear trends. The Gamma exponential dispersion model has a quadratic mean variance relationship, which also seems like a good fit from the plot above. There are a few observations with very large values of `Rain`, but none of which appear extreme enough to be considered outliers.
+There seems to be a positive relationship between `SOI` and `Rain`. The above plots motivates the use of a Gamma exponential dispersion model, which is typically used to fit positive continuous right skewed data. The Gamma exponential dispersion model has a quadratic mean variance relationship, which also seems like a good fit from the scatter plot. The scatter plot also hints at potential non-linear trends. There are a few observations with very large values of `Rain`, but none of which appear extreme enough to be considered outliers.
 
-A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. A problem we have encountered when using the identity link is that for some parameters the model produces negative predictions, which is not possible for rain fall, and furthermore causes convergence issues. For this reason the identity link is disregarded. We fit two models: one with log link and one using the canonical link. 
+A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. With the identity link it is likely that the model predictions lie outside the support of the gamma-model, i.e. are negative, which is not possible for rain fall (we have observed this when we bootstrapped a model with identity link). This causes issues when we bootstrap this model and for this reason the identity link is disregarded. We therefore fit two models: One with log link and one using the canonical link. 
 
 ```{r}
 glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
@@ -785,6 +789,7 @@ tibble(
                        mean(residuals(glm_gamma_inv, type = "deviance")^2))
 ) %>% pander()
 ```
+
 The log link function seems to be the best fit in terms of training error. We plot the model fits
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
@@ -805,20 +810,21 @@ grid.arrange(
   nrow = 1
 )
 ```
-The Gamma model with log link function seems to fit data reasonably well. We choose to proceed with the Gamma model with the log link rather than the inverse link function. 
 
-## Should additional predictors be included?
+Both models seem to fit the data reasonably well. There is no evidence of overfitting so assume the training error would generalize well. Based on this, we choose to proceed with the the log link gamma model rather than the inverse link model.
 
-We perform an LRT test to see whether or not we should include additional predictors. We consider to add the predictors `Phase` and `Year.` As mentioned in the EDA, `Phase` and `SOI` are correlated, and it could be problematic to include both in the model. But as discussed in the EDA, `Phase` contains information that `SOI` does not, meaning that the variable could potentially improve our predictions. 
+## Additional predictors
+
+We perform an LRT test to see whether or not we should include additional predictors. We consider to add the predictors `Phase` and `Year.` In the EDA we observed that `Phase` and `SOI` are correlated, and it could be problematic to include both in the model. However, we also discussed that `Phase` contains information that `SOI` does not and vice versa, meaning that the variable could potentially improve our predictions. 
 
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
 ```
-According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. 
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor.
 
-## Explore possible inclusion of nonlinear effects
+## Nonlinear effects
 
-We consider to include a non-linear effect of SOI. We consider a natural cubic spline with 2,3,4,5 or 6 degrees of freedom:
+We consider to include a non-linear effect of SOI. In particular we explore the inclusion of a natural cubic spline with 2,3,4,5 or 6 degrees of freedom:
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 form1 <- Rain ~ SOI
@@ -881,7 +887,7 @@ grid.arrange(
 )
 ```
 
-Adding more degrees of freedom to the natural cubic splines adds flexibility to the model, allowing it to fit data better. This comes at the expense of potentially overfitting. The model fitted with 6 degress of freedom is quite likely overfitting data. But in order to better assess which model is the best in terms of prediction, we do cross-validation to compare the models. We first define the error function. We use the deviance loss function.
+Adding more degrees of freedom to the natural cubic splines adds flexibility to the model, allowing it to fit data better. This comes at the expense of potential overfitting. The model fitted with 6 degress of freedom is quite likely overfitting data. In order to better assess the models in terms of predictions, we do cross-validation to compare the models. We first define the deviance loss, which we will use as error function.
 
 ```{r}
 # Error function
@@ -935,11 +941,12 @@ tibble("Df."= seq(1,6),
              error_func = dev_loss))
 ) %>% pander()
 ```
+
 We proceed with the model with 2 degrees of freedom as it has the smallest cross validation error. But note that the model without natural cubic splines is very close to performing just as well in terms of generalization error. Since we are interested in prediction, we choose the model with 2 degrees of freedom. If interpretability was of higher priority, we would choose the model without natural cubic splines. 
 
 ## Model Diagnostics
 
-We do model diagnostics for the chosen model. 
+We do model diagnostics for the chosen model.
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 mod_final <- glm(form2, data = rain.data1, family = Gamma("log"))
@@ -951,6 +958,11 @@ glm_gamma.obj <- transform(
   .pearson = residuals(mod_final, type = "pearson")
 )
 
+psihat_pplot <- summary(glm_gamma_log)$dispersion
+residPPplot <- pgamma(rain.data1$Rain, 
+                     shape = 1 / psihat_pplot, 
+                     rate = 1  / (psihat_pplot * fitted(glm_gamma_log)))
+
 grid.arrange(
   qplot(.fitted, .deviance, data = glm_gamma.obj) + 
     geom_smooth() + xlab("Fitted values") +
@@ -961,11 +973,17 @@ grid.arrange(
   qplot(.fitted, sqrt(abs(.pearson)), data = glm_gamma.obj) + 
     geom_smooth() + xlab("Fitted values") +
     ylab("Square root of Pearson residuals"),
-  ncol=3
+  qplot(ppoints(length(residPPplot)), sort(residPPplot)) +
+    geom_abline(slope = 1, intercept = 0, col = "blue") + 
+    xlab("Theoretical uniform quantiles") +
+    ylab("Empirical quantiles"),
+  ncol = 2
 )
 ```
 
-From the plots we see no clear evidence against model assumptions. The residuals have approximately mean zero and equal variance. There are a few large residuals, but they are not alarming. We evaluate these plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values and the Pearson residuals against fitted values for each bootstrap sample. 
+From the plots we see no clear evidence against the weak model assumptions GA1 and GA2. The residuals seem to be randomly scattered around zero with constant variance. There are a few large residuals, but they are not alarming. As the PP-plot displays, the stronger distributional assumption GA3 seem to be slightly off which implies that inference relying on distributional results should be avoided or employed with consideration. 
+
+We evaluate the residual plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values and the Pearson residuals against fitted values for each bootstrap sample. 
 
 ```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 set.seed(1986234)
@@ -1038,7 +1056,8 @@ grid.arrange(
   ncol = 3
 )
 ```
-The bootstrapped residual plots resemble the original residual plots well. This indicates that the fitted model is correct. A thing to note is that the few large residuals that we observed in the original residual plots are also present in the bootstrapped plots. 
+
+The bootstrapped residual plots resemble the original residual plots well. This further indicates that GA1 and GA2 are satisfied. Note how the few large residuals that we observed in the original residual plots are also present in the bootstrapped plots supporting the claim that they are not alarming.
 
 ## Reporting a final model and interpretation
 
@@ -1048,7 +1067,7 @@ The summary of our final model
 summary(mod_final) %>% pander()
 ```
 
-From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. Below the model predictions for a few values of SOI are printed
+From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. We print the model predictions for a few values of SOI:
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 tibble(
@@ -1058,6 +1077,7 @@ tibble(
                       type = "response")
 ) %>% pander()
 ```
+
 A plot of the model fit is shown below.
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
@@ -1072,7 +1092,7 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
 
 The fitted model predicts that rainfall is increasing as a function of SOI. The slope of the model is largest for values of SOI between $-10$ and $10$. For SOI values that are larger or smaller than this, the model is more constant. 
 
-We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model predictions as described on page 220. The code used for the pair sampling can be seen below
+We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model as described on page 220. The code used for the pair sampling can be seen below
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 # Pair sampling
@@ -1158,10 +1178,9 @@ We will now compare the three confidence intervals.
 grid.arrange(p1, p2, p3, nrow = 1)
 ```
 
-The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is very very narrow, which seems very unlikely. Apart from this, we see that the two other confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
+The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is extremely narrow, which seems unlikely. Apart from this, we see that the two other confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
 
 ## Conclusion
-
 Because of the right skew of data we decided to use the Gamma model to fit the data. We chose the log link as it ensures that the model predictions are kept within the domain of the distribution and since it performed well in terms of training error. We chose not to include further predictors as they were insignificant according to the LRT test.
 
 The model we have fitted is a Gamma model with a log link function and a natural cubic spline with 2 degrees of freedom. This was the model with the smallest generalization error chosen by cross validation, where we considered models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6.

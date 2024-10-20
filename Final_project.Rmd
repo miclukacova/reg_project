@@ -142,7 +142,7 @@ Since the two predictors are collinear to some extent we will be careful, when w
 
 We finally investigate the correlation between `Year` and `Phase`. Since `Phase` is categorical and `Year` is ordinal we use a boxplot to plot the two variables against each other
 
-```{r}
+```{r warning = FALSE, echo = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
 mYear <- melt(Rain.data[, c("Year", facVar)],
               id = "Year")
 
@@ -244,7 +244,7 @@ pander(lm.fit.imputed)
 
 We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the estimates are fairly similar. We compute simple confidence interval (based on the above table output) for the estimates of each imputation and plot them:
 
-```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
+```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
 k_hat_lin_conf <- list()
 for (i in 1:5) {
   k_hat_lin_confest <- lm.fit.imputed[[i]]$coef[[2]]
@@ -255,15 +255,16 @@ for (i in 1:5) {
 }
 
 estimates_df <- do.call(rbind, lapply(k_hat_lin_conf, as.data.frame))
-estimates_df$Imputation <- paste("Imputation", 1:nrow(estimates_df))  # Add model labels
+estimates_df$Imputation <- 1:nrow(estimates_df)
 
 ggplot(estimates_df, aes(x = Imputation, y = Estimate, ymin = LowerCI, ymax = UpperCI)) +
   geom_pointrange() +
   geom_errorbar(aes(ymin = LowerCI, ymax = UpperCI), width = 0.2, color = "black") +
   theme_minimal() +
-  labs(title = "k estimates for each imputation with Confidence Intervals",
-       x = "Imputation",
+  ggtitle("Estimates of k for each imputation with confidence interval") +
+  labs(x = "Imputation",
        y = "Estimate") +
+  theme(plot.title = element_text(size=7)) +
   coord_flip()  # Flip coordinates for a horizontal display
 ```
 As all estimates of $k$ are within the same margin of error (according to these confidence intervals), we choose to merge the imputations into a single data set to simplify future computations and communicate results more clearly. We should however keep in mind that this may artificially reduce the variance of the data slightly and in a more thorough analysis we should keep all five imputed data sets.
@@ -293,13 +294,12 @@ pander(c("Estimate of k" = k_hat_lin, "Estimate of psi" = psi_hat_lin))
 
 We can visually check that the estimated regression coefficients are reasonably estimated by plotting the fitted regression line on top of the data:
 
-```{r echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
+```{r echo = FALSE, fig.width = 4, fig.height = 3.5, fig.align = 'center'}
 ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE, color = "black", size = 0.5) +
   xlab("log(mean(Y))") +
   ylab("log(var(Y))") +
-  ggtitle("log(var(Y)) against log(mean(Y))") +
   theme_bw()
 ```
 
@@ -460,7 +460,7 @@ pander(psi_hat_tweedie.fit)
 of the Tweedie model. Apart from that the results are identical to the previous model and the interpretation is the same.
 
 We recalculate the estimated probability that it will not rain in July by plugging in the estimated values of $k$ and $\psi$ and the empirical mean of our data:
-```{r echo = FALSE}
+```{r}
 pander(c("Estimate using psi from linear model" 
          = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_lin*(2 - k_hat_AIC))), 
          "Estimate using psi from Tweedie model" 

@@ -1170,12 +1170,13 @@ p2 <- qplot(rain.data1$SOI, rain.data1$Rain) +
   ggtitle("Analytical SE CI")
 ```
 
-We will now compare the two confidence intervals. 
+We will now compare the two confidence intervals.
+
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 grid.arrange(p1, p2, nrow = 1)
 ```
 
-We see that the two confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions. Apart from this, the two confidence intervals resemble each other quite a lot. 
+We see that the two confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions. Note also, that the bootstrap confidence interval covers negative values, which is of course a poor prediction of rainfall. Apart from this, the two confidence intervals resemble each other quite a lot.
 
 ## Conclusion
 The analysis carried out in this project suggests that both SOI phase and SOI are significant predictors of the rainfall at Eromanga in Queensland, Australia during the month of July. 

@@ -800,7 +800,7 @@ ggplot(data = k_plot_SOI_df, aes(x = k, y = AIC)) +
             hjust = 0, vjust = 0, size = 2.5) +
   geom_text(aes(x = 2.4, y = k_hat_AIC_SOI_obj + 0.1, label = paste0("Minimum AIC at ", round(k_hat_AIC_SOI_obj,2))), size = 2.5)
 ```
-The estimate of $k = 2.198$ suggest that the Gamma model could be a reasonable fit. This method of estimating $k$ is of course only valid if the Tweedie model is areasonable fit for the data. 
+The estimate of $k = 2.198$ suggest that the Gamma model could be a reasonable fit. This method of estimating $k$ is of course only valid if the Tweedie describes the data well. 
 
 A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. With the identity link it is likely that the model predictions lie outside the support of the gamma-model, i.e. are negative, which is not reasonable for rainfall and can cause problems if we bootstrap the model. For this reason the identity link is disregarded. We therefore fit two models: One with log link and one using the canonical link. 
 
@@ -1156,7 +1156,7 @@ We will further construct a confidence interval of the form
 $$
 \hat{f} \pm 1.96 \hat{\text{se}} 
 $$
-We will use the analytical estimates of the standard errors of the model predictions. Note that this interval will be symmetric around the point estimate, and that the interval is based on distributional assumptions regarding the $Z$-score. However, it could still be interesting to compare this approach with the bootstrap approach.
+We will use the analytical estimates of the standard errors of the model predictions. Note that this interval will be symmetric around the point estimate, and that the interval is based on distributional assumptions regarding the $Z$-score. For this reason it could be interesting to compare this approach with the bootstrap approach.
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 SE_an <- predict(mod_final, newdata = rain.data1, type = "response", se.fit = TRUE)$se.fit

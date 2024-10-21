@@ -90,7 +90,7 @@ grid.arrange(
 )
 ```
 
-We observe that the response variable `Rain` is right skewed, which should be considered in later analysis. Additionally, Category 3 in `Phase` has relatively few observations, which may also require consideration in subsequent analysis. We proceed to investigate possible co-linearity between the variables in the data set. We assess correlation between the numerical variables `Rainfall`, `SOI` and `Year` with a correlation plot:
+We observe that the response variable `Rain` is right-skewed, which should be considered in later analysis. Additionally, Category 3 in `Phase` has relatively few observations, which may also require consideration in subsequent analysis. We proceed to investigate possible co-linearity between the variables in the data set. We assess correlation between the numerical variables `Rainfall`, `SOI` and `Year` with a correlation plot:
 
 ```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
 cor.print <- function(x, y){
@@ -140,16 +140,13 @@ ggplot(mSOI,
 
 Since the two predictors are collinear to some extent we will be careful, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing exact values of SOI, `Phase` contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not, so it could still be valuable to include both variables in a model. We will go into further details on this matter in subsequent sections.
 
-We finally investigate the correlation between `Year` and `Phase`. Since `Phase` is categorical and `Year` is ordinal we use a boxplot to plot the two variables against each other
-
-```{r warning = FALSE, echo = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
-mYear <- melt(Rain.data[, c("Year", facVar)],
-              id = "Year")
-
-ggplot(mYear,
-       aes(x = factor(value, levels = 1:5), y = Year)) +
-  geom_boxplot(fill = I(gray(0.8))) + xlab("") +
-  facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
+The last two variables for which we have not checked the correlation are the variables `Year` and `Phase`. Since `Phase` is categorical and `Year` ordinal, there is no suitable substitute for the Pearson correlation. We plot the two variables against each other
+```{r}
+ggplot(Rain.data, aes(x = Year, y = as.numeric(Phase))) +
+  geom_point()+
+  xlab("Year") +
+  ylab("Phase") +
+  theme_bw()
 ```
 The plot does not suggest any dependence between `Year` and `Phase`. 
 
@@ -242,9 +239,9 @@ pander(lm.fit.imputed)
 ```
 
 
-We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the estimates are fairly similar. We compute simple confidence interval (based on the above table output) for the estimates of each imputation and plot them:
+We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the predictions are fairly similar. We compute simple confidence interval (based on the above table output) for the estimates of each imputation and plot them:
 
-```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
+```{r warning = FALSE, echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
 k_hat_lin_conf <- list()
 for (i in 1:5) {
   k_hat_lin_confest <- lm.fit.imputed[[i]]$coef[[2]]
@@ -255,16 +252,15 @@ for (i in 1:5) {
 }
 
 estimates_df <- do.call(rbind, lapply(k_hat_lin_conf, as.data.frame))
-estimates_df$Imputation <- 1:nrow(estimates_df)
+estimates_df$Imputation <- paste("Imputation", 1:nrow(estimates_df))  # Add model labels
 
 ggplot(estimates_df, aes(x = Imputation, y = Estimate, ymin = LowerCI, ymax = UpperCI)) +
   geom_pointrange() +
   geom_errorbar(aes(ymin = LowerCI, ymax = UpperCI), width = 0.2, color = "black") +
   theme_minimal() +
-  ggtitle("Estimates of k for each imputation with confidence interval") +
-  labs(x = "Imputation",
+  labs(title = "k estimates for each imputation with Confidence Intervals",
+       x = "Imputation",
        y = "Estimate") +
-  theme(plot.title = element_text(size=7)) +
   coord_flip()  # Flip coordinates for a horizontal display
 ```
 As all estimates of $k$ are within the same margin of error (according to these confidence intervals), we choose to merge the imputations into a single data set to simplify future computations and communicate results more clearly. We should however keep in mind that this may artificially reduce the variance of the data slightly and in a more thorough analysis we should keep all five imputed data sets.
@@ -294,12 +290,13 @@ pander(c("Estimate of k" = k_hat_lin, "Estimate of psi" = psi_hat_lin))
 
 We can visually check that the estimated regression coefficients are reasonably estimated by plotting the fitted regression line on top of the data:
 
-```{r echo = FALSE, fig.width = 4, fig.height = 3.5, fig.align = 'center'}
+```{r echo = FALSE, fig.width = 5, fig.height = 4, fig.align = 'center'}
 ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE, color = "black", size = 0.5) +
   xlab("log(mean(Y))") +
   ylab("log(var(Y))") +
+  ggtitle("log(var(Y)) against log(mean(Y))") +
   theme_bw()
 ```
 
@@ -354,11 +351,11 @@ Furthermore, the model predicts $\psi$ to be
 psi_hat_tweedie.fit <- summary(tweedie.fit)$dispersion
 pander(psi_hat_tweedie.fit)
 ```
-which is slightly different from the estimate
+which is slightly different from the result obtained from the linear regression where $\psi$ was estimated to be
 ```{r echo = FALSE}
 pander(psi_hat_lin)
 ```
-obtained from the linear regression.
+.
 
 ## Estimating probability of zero rain in July
 We use the estimates obtained in the previous exercises to estimate the probability that it will not rain in July. In the theoretical exercises we derived the probability of zero rain to be
@@ -419,7 +416,7 @@ pander(k_hat_lin)
 ```
 . To ensure, that we have found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
 
-```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 6, fig.height = 5, fig.align = 'center'}
 k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
 
 k_hat_AIC_obj <- optimize(tweedie.AIC_profile_likelihood, lower = 1.05, upper = 1.95)$objective
@@ -432,9 +429,9 @@ ggplot(data = k_plot_df, aes(x = k, y = AIC)) +
   theme_bw() +
   geom_vline(xintercept = k_hat_AIC, linetype = "dashed") +
   geom_hline(yintercept = k_hat_AIC_obj, linetype = "dashed") +
-  geom_text(aes(x = k_hat_AIC + 0.01, y = 850, label = paste0("Optimal value of k at ", round(k_hat_AIC,2))),
-            hjust = 0, vjust = 0, size = 2.5) +
-  geom_text(aes(x = 1.83, y = k_hat_AIC_obj + 20, label = paste0("Minimum AIC at ", round(k_hat_AIC_obj,2))), size = 2.5)
+  geom_text(aes(x = k_hat_AIC + 0.01, y = 835, label = paste0("Optimal value of k at ", round(k_hat_AIC,3))),
+            hjust = 0, vjust = 0) +
+  geom_text(aes(x = 1.85, y = k_hat_AIC_obj + 20, label = paste0("Minimum AIC at ", round(k_hat_AIC_obj,3))))
 ```
 The plot confirms, that `optimize()` has found the global minimum of the AIC for $1<k<2$. We repeat the calculations from the previous exercises using the optimal value of $k$ found by minimizing the profile likelihood.
 
@@ -460,7 +457,7 @@ pander(psi_hat_tweedie.fit)
 of the Tweedie model. Apart from that the results are identical to the previous model and the interpretation is the same.
 
 We recalculate the estimated probability that it will not rain in July by plugging in the estimated values of $k$ and $\psi$ and the empirical mean of our data:
-```{r}
+```{r echo = FALSE}
 pander(c("Estimate using psi from linear model" 
          = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_lin*(2 - k_hat_AIC))), 
          "Estimate using psi from Tweedie model" 
@@ -741,7 +738,10 @@ pander(k_hat_AIC + c(-1, 1) * 1.96 * se_AIC)
 
 # Analysis using SOI directly
 
-We choose to model the rainfall conditionally on having rained to provide a different perspective on the data and avoid repeating the previous analysis. We filter out observations where the rainfall is zero:
+
+We choose to model the rainfall conditionally on having rained. While a Tweedie model could incorporate observations with zero rainfall, this model is not directly comparable to one excluding zero rainfall so to simplify the following analysis and avoid repetition, we chose the latter model. In a more comprehensive analysis, both models should be considered, along with a method for comparing them. 
+
+We filter out observations where the rainfall is zero:
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE}
 rain.data1 <- Rain.data.comp %>%
@@ -771,38 +771,9 @@ ggplot(data = rain.data1, aes(x = SOI, y = Rain)) +
   ggtitle("Rain against SOI")
 
 ```
-There seems to be a positive relationship between `SOI` and `Rain`. The scatter plot also hints at potential non-linear trends and there are a few observations with very large values of `Rain`, but none of which appear extreme enough to be considered outliers.
+There seems to be a positive relationship between `SOI` and `Rain`. The above plots motivates the use of a Gamma exponential dispersion model, which is typically used to fit positive continuous right skewed data. The Gamma exponential dispersion model has a quadratic mean variance relationship, which also seems like a good fit from the scatter plot. The scatter plot also hints at potential non-linear trends. There are a few observations with very large values of `Rain`, but none of which appear extreme enough to be considered outliers.
 
-The above plots motivates the use of a Gamma exponential dispersion model, which is typically used to fit positive continuous right skewed data. The Gamma exponential dispersion model has a quadratic mean variance relationship ($k = 2$), which also seems like a good fit from the scatter plot. We can further support this claim, by estimating the value of $k$ for a Tweedie model with `SOI` as predictor, using the data containing observations with rainfall. We plot the estimated AIC profile likelihood as a function of $k$:
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
-tweedie.AIC_profile_likelihood_SOI <- function(k) {
-  profile_likelihood(form = Rain ~ SOI, 
-                     family = tweedie(var.power = k, link.power = 0), 
-                     data = rain.data1,
-                     eval = AICtweedie)
-}
-k_hat_AIC_SOI <- optimize(tweedie.AIC_profile_likelihood_SOI, lower = 1, upper = 2.5)$minimum
-
-k_plot_SOI_df <- data.frame(k = seq(1.9, 2.5, by = 0.001), AIC = sapply(seq(1.9, 2.5, by = 0.001), FUN = tweedie.AIC_profile_likelihood_SOI))
-
-k_hat_AIC_SOI_obj <- optimize(tweedie.AIC_profile_likelihood_SOI, lower = 1.9, upper = 2.5)$objective
-
-ggplot(data = k_plot_SOI_df, aes(x = k, y = AIC)) +
-  geom_line() +
-  xlab("k") +
-  ylab("AIC") +
-  ggtitle("AIC against k") +
-  theme_bw() +
-  geom_vline(xintercept = k_hat_AIC_SOI, linetype = "dashed") +
-  geom_hline(yintercept = k_hat_AIC_SOI_obj, linetype = "dashed") +
-  geom_text(aes(x = k_hat_AIC_SOI - 0.1, y = 638.5, label = paste0("Optimal value of k at ", round(k_hat_AIC_SOI,3))),
-            hjust = 0, vjust = 0, size = 2.5) +
-  geom_text(aes(x = 2.4, y = k_hat_AIC_SOI_obj + 0.1, label = paste0("Minimum AIC at ", round(k_hat_AIC_SOI_obj,2))), size = 2.5)
-```
-The estimate of $k = 2.198$ suggest that the Gamma model could be a reasonable fit.
-
-A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. With the identity link it is likely that the model predictions lie outside the support of the gamma-model, i.e. are negative, which is not reasonable for rainfall and can cause problems if we bootstrap the model. For this reason the identity link is disregarded. We therefore fit two models: One with log link and one using the canonical link. 
+A typical link function choice for the Gamma model is the log link function. If we fit the model using the log link function, we fit the log of the mean of the response variables as a linear combination of the predictors. Other options include the identity link and the canonical link, which is the inverse function. With the identity link it is likely that the model predictions lie outside the support of the gamma-model, i.e. are negative, which is not possible for rain fall (we have observed this when we bootstrapped a model with identity link). This causes issues when we bootstrap this model and for this reason the identity link is disregarded. We therefore fit two models: One with log link and one using the canonical link. 
 
 ```{r}
 glm_gamma_log <- glm(Rain ~ SOI, data = rain.data1, family = Gamma("log"))
@@ -840,16 +811,16 @@ grid.arrange(
 )
 ```
 
-Both models seem to fit the data reasonably well. There is no evidence of overfitting so assume the training error would generalize well. Based on this, we choose to proceed with the the log link gamma model rather than the inverse link model.
+Both models seem to fit the data reasonably well. There is no evidence of overfitting so we assume that the training error would generalize well. Based on this, we choose to proceed with the the log link gamma model rather than the inverse link model.
 
 ## Additional predictors
 
-We perform an LRT test to see whether or not we should include additional predictors. We consider to add the predictors `Phase` and `Year.` In the EDA we observed that `Phase` and `SOI` are correlated, and it could be problematic to include both in the model. However, we also discussed that `Phase` contains information that `SOI` does not and vice versa, meaning that the variable could potentially improve our predictions. 
+We perform an LRT test to see whether or not we should include additional predictors. We consider to add the predictors `Phase` and `Year`. In the EDA we observed that `Phase` and `SOI` are correlated, and it could be problematic to include both in the model. However, we also discussed that `Phase` contains information that `SOI` does not and vice versa, meaning that the variable could potentially improve our predictions. 
 
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
 ```
-According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor.
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We note that the likelihood ratio test hinges on the GA3 assumption. If this assumption is violated, the test may not be reliable. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test it seems very unlikely that including additional predictors will improve the predictive strentgth of the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor.
 
 ## Nonlinear effects
 
@@ -1096,7 +1067,7 @@ The summary of our final model
 summary(mod_final) %>% pander()
 ```
 
-From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. We print the model predictions for a few values of SOI:
+From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. We print the model predictions for a few values of `SOI`:
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 tibble(
@@ -1119,7 +1090,7 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
   ggtitle("Rain ~ ns(SOI, df = 2)")
 ```
 
-The fitted model predicts that rainfall is increasing as a function of SOI. The slope of the model is largest for values of SOI between $-10$ and $10$. For SOI values that are larger or smaller than this, the model is more constant. 
+The fitted model predicts that rainfall is increasing as a function of `SOI.` The slope of the model is largest for values of `SOI` between $-10$ and $10$. For `SOI` values that are larger or smaller than this, the model is more constant. 
 
 We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model as described on page 220. The code used for the pair sampling can be seen below
 
@@ -1151,73 +1122,40 @@ p1 <- qplot(rain.data1$SOI, rain.data1$Rain) +
   ggtitle("Pair sampling comb. based CI")
 ```
 
-We will further construct confidence intervals of the form
+We will further construct a confidence intervals of the form
 
 $$
 \hat{f} \pm 1.96 \hat{\text{se}} 
 $$
-Note that these intervals will be symmetric around the point estimate. First we will use residual sampling to estimate standard errors of the model predictions and use these to construct the confidence interval. 
-```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'} 
-# Residual sampling
-set.seed(170)
-mus <- mod_final$fitted.values
-res <- mod_final$residuals
-boot_pred2 <- matrix(nrow = n, ncol = B)
 
-for(b in 1:B){
-  boot_samp <- sample(n, replace = TRUE)
-  boot_data <- data.frame(Rain = mus + res[boot_samp], SOI = rain.data1$SOI)
-  boot_mod <- glm(Rain ~ ns(SOI, df = 2), 
-                  data = boot_data, 
-                  family = Gamma("log"))
-  boot_pred2[,b] <- predict(boot_mod, newdata = rain.data1, type = "response")
-}
+We will use the analytical estimates of the standard errors of the model predictions. Note that this interval will be symmetric around the point estimate, and that the interval is based on distributional assumptions regarding the $Z$-score. However, it could still be interesting to compare this approach with the bootstrap approach.
 
-SEs <- numeric(n)
-for(i in 1:n){
-  SEs[i] <- sd(boot_pred2[i,])
-}
-
-CIs2 <- cbind(pred2 - SEs*qnorm(0.975), pred2 + SEs*qnorm(0.975))
+```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
+SE_an <- predict(mod_final, newdata = rain.data1, type = "response", se.fit = TRUE)$se.fit
+CIs2 <- cbind(pred2 - SE_an*qnorm(0.975), pred2 + SE_an*qnorm(0.975))
 
 p2 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
   geom_line(aes(y = pred2), color = "black") +
   geom_ribbon(aes(ymin = CIs2[,2], ymax = CIs2[,1]), alpha = 0.3) +
   xlab("SOI") +
   ylab("Rain") +
-  ggtitle("Res. samp. SE CI")
-```
-
-A last confidence interval we will consider is created in the same way as above, but using analytical standard errors of the model predictions. 
-
-```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-SE_an <- predict(mod_final, newdata = rain.data1, type = "response", se.fit = TRUE)$se.fit
-CIs3 <- cbind(pred2 - SE_an*qnorm(0.975), pred2 + SE_an*qnorm(0.975))
-
-p3 <- qplot(rain.data1$SOI, rain.data1$Rain) + 
-  geom_line(aes(y = pred2), color = "black") +
-  geom_ribbon(aes(ymin = CIs3[,2], ymax = CIs3[,1]), alpha = 0.3) +
-  xlab("SOI") +
-  ylab("Rain") +
   ggtitle("Analytical SE CI")
 ```
 
-We will now compare the three confidence intervals. 
+We will now compare the two confidence intervals. 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-grid.arrange(p1, p2, p3, nrow = 1)
+grid.arrange(p1, p2, nrow = 1)
 ```
 
-The first thing that catches the eye is that the confidence interval based on residual sampling SE estimates is extremely narrow, which seems unlikely. Apart from this, we see that the two other confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A last thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions.
+We see that the two confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions. Apart from this, the two confidence intervals resemble each other quite a lot. 
 
 ## Conclusion
-The analysis carried out in this project suggests that both SOI phase and SOI are significant predictors of the rainfall at Eromanga in Queensland, Australia during the month of July. 
+Because of the right skew of data we decided to use the Gamma model to fit the data. We chose the log link as it ensures that the model predictions are kept within the domain of the distribution and since it performed well in terms of training error. We chose not to include further predictors as they were insignificant according to the LRT test.
 
-In the first part of the analysis we fitted a Tweedie model with `Phase` as predictor to conclude that `Phase` was a significant predictor of `Rain`.
+The model we have fitted is a Gamma model with a log link function and a natural cubic spline with 2 degrees of freedom. This was the model with the smallest generalization error chosen by cross validation, where we considered models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6.
 
-In the second part of the analysis, we chose to model the data conditionally on having rained to provide a different perspective and avoid repeating previous steps of the analysis. Given the persistent right skew in the data and the AIC profile-likelihood estimate of $k = 2.198$, we selected a Gamma model which corresponds to a Tweedie model with $k = 2$. We chose the log link to keep predictions within the support of the distribution and because this model performed best in terms of training error compared to a model with the inverse-link. We decided not to include further predictors as they appeared to be insignificant. We finally included a natural cubic spline with 2 degrees of freedom since this model had the smallest generalization error compared to models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6. We were finally able to conclude that `SOI` is a significant predictor of `Rain` and use the model to predict rainfall at different `SOI` values.
+The model is well fitted to the data and the residuals show no evidence against the model assumptions. However the PP-plot showed that the GA3 assumption might not be completely satisfied. 
 
-Although the models from part one and part two of the analysis are not directly comparable, their predictions appeared to be within the same range. The Tweedie model from part one predicted large amounts of rainfall (point estimate of $33.95$) when the SOI phase is consistently positive and small amounts of rainfall (point estimate of $2.34$) when SOI phase is rapidly falling. The Gamma model from part two predicted large amounts of rainfall when SOI is high (point estimate of $35.57$ when SOI is $20$) and small amounts of rainfall when SOI is low (point estimate of $4.01$ when SOI is $-20$). This suggest that `Rain` is increasing as a function of `SOI` and that a consistently positive or rapidly rising SOI phase leads to larger amounts of rain than consistently negative or rapidly falling SOI phases.
-
-For future work it would be interesting to fit a Tweedie model with `SOI` as predictor to use the zero rainfall observations and compare the findings of this model with the findings of the Tweedie model using `Phase` as predictor. It would also be interesting to fit a Tweedie model conditionally on having rained using the estimate of $k$ determined by the AIC profile likelihood and compare this model to the Gamma model we fitted in the analysis. Finally, it would be of interest to provide prediction intervals for the model predictions to give a more complete picture of the uncertainty of the predictions.
+According to the model, `SOI` is a significant predictor of `Rain`. The model predicts that `Rain` is increasing as a function of `SOI`. We have constructed confidence intervals for the model predictions, which show that the model is most certain for `SOI` values for which we have many observations, and less certain for `SOI` values where we have few observations. The bootstrap combinant base confidence interval as well as the analytical standard error based confidence interval show similar results.
 
 

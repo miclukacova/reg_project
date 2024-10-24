@@ -182,14 +182,16 @@ Given the modest number of missing observations, it is difficult to identify any
 
 Assuming MAR we can use multiple imputation to impute the missing data. If the MAR assumption holds the imputed values are unbiased and the variation in the data set is preserved. We use the `mice()` function (multiple imputations using chained equations) from the package `mice` to perform the multiple imputations. This procedure uses random draws from the conditional distribution of the target variable given the other variables. That is, we take a bootstrap sample from our data and fit a regression model to this sample to predict the missing values. We use _predictive mean matching_ (PMM) to replace the missing values in each imputed data set. This method uses the value of a donor observation to fill in the missing values. The donors are identified by matching the predicted value of the target to the donor value. PMM does not require any distributional assumptions and is therefore fairly robust to different types of data (F. E. Harell, Jr., 2015). 
 
-We run the imputations and display the first five rows of the first two imputed data sets:
+We run the imputations and display the imputed values for each data set:
 
 ```{r warning = FALSE}
 Rain.data.impute <- mice(Rain.data, method = "pmm", 
                          m = 5, seed = 10102024,  
                          printFlag = FALSE)
-pander(head(complete(Rain.data.impute,1)))
-pander(head(complete(Rain.data.impute,2)))
+
+missing_rain_imp <- Rain.data.impute$imp$Rain
+missing_years <- Rain.data$Year[as.numeric(rownames(missing_rain_imp))]
+pander(data.frame(Year = missing_years, Rain = missing_rain_imp, row.names = NULL))
 ```
 
 We plot the density of the five imputed data sets (red dotted) along with the density of the original data set (black solid) to check if the imputed data sets resemble each other and the original data set.
@@ -242,7 +244,7 @@ pander(lm.fit.imputed)
 ```
 
 
-We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the estimates are fairly similar. We compute simple confidence interval (based on the above table output) for the estimates of each imputation and plot them:
+We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the estimates are fairly similar. We compute confidence interval (based on the standard deviation in the above table output) for the estimates of each imputation and plot them:
 
 ```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
 k_hat_lin_conf <- list()
@@ -267,7 +269,7 @@ ggplot(estimates_df, aes(x = Imputation, y = Estimate, ymin = LowerCI, ymax = Up
   theme(plot.title = element_text(size=7)) +
   coord_flip()  # Flip coordinates for a horizontal display
 ```
-As all estimates of $k$ are within the same margin of error (according to these confidence intervals), we choose to merge the imputations into a single data set to simplify future computations and communicate results more clearly. We should however keep in mind that this may artificially reduce the variance of the data slightly and in a more thorough analysis we should keep all five imputed data sets.
+As all estimates of $k$ are within the same margin of error (according to these confidence intervals), we choose to merge the imputations into a single data set to simplify future computations and communicate results more clearly. We should however keep in mind that this may artificially reduce the variance of the data and in a more thorough analysis we should keep all five imputed data sets.
 
 We use the `merge_imputations` from the `sjmisc` package which merges multiple imputed data frames from `mice::mids()-objects` into a single data frame by computing the mean or selecting the most likely imputed value.
 
@@ -290,6 +292,12 @@ k_hat_lin <- lm.fit$coef[[2]]
 psi_hat_lin <- exp(lm.fit$coef[[1]])
 
 pander(c("Estimate of k" = k_hat_lin, "Estimate of psi" = psi_hat_lin))
+```
+
+We can calculate a 95% confidence interval for the estimates of $k$ and $\log(\psi)$ using a profile likelihood method:
+
+```{r}
+pander(confint(lm.fit))
 ```
 
 We can visually check that the estimated regression coefficients are reasonably estimated by plotting the fitted regression line on top of the data:
@@ -339,7 +347,7 @@ millimeters in July when SOI is in this phase. The model estimates that the rain
 ```{r echo = FALSE}
 pander(round(tweedie.fit.pred[[3]], 3))
 ```
-millimeters on average in July. The rainfall for Phase 4 is significantly different from the rainfall in Phase 1 according to the model with a point estimate of average rainfall of 
+millimeters on average in July. It is worth noting, that we have quite few observations in this group which could distort the model conclusion as it simply does not have enough information to determine whether or not Phase 1 and Phase 3 are significantly different. The rainfall for Phase 4 is significantly different from the rainfall in Phase 1 according to the model with a point estimate of average rainfall of 
 ```{r echo = FALSE}
 pander(round(tweedie.fit.pred[[4]], 3))
 ```
@@ -413,7 +421,7 @@ k_hat_AIC <- optimize(tweedie.AIC_profile_likelihood, lower = 1.05, upper = 1.95
 pander(k_hat_AIC)
 ```
 
-We note that the optimal value of $k$ using the AIC profile likelihood method is fairly close to the value of $k$ estimated by the linear model
+We note that the optimal value of $k$ using the AIC profile likelihood method is fairly close to the value of $k$ estimated by the linear model, which is
 ```{r echo = FALSE}
 pander(k_hat_lin)
 ```
@@ -505,7 +513,7 @@ diag_lin_PR_fitted <- qplot(x = linmod.fitted, y = linmod.pearson, data = diag_d
   geom_point() +
   geom_smooth() +
   xlab("Fitted values") +
-  ylab("Deviance residuals") +
+  ylab("Pearson residuals") +
   ggtitle("Pearson residuals against fitted values") +
   theme_bw() +
   theme(plot.title=element_text(size=10))
@@ -592,7 +600,7 @@ diag_AIC_PR_fitted <- qplot(x = AIC.fitted, y = AIC.pearson, data = diag_df) +
   geom_point() +
   geom_smooth() +
   xlab("Fitted values") +
-  ylab("Deviance residuals") +
+  ylab("Pearson residuals") +
   ggtitle("Pearson residuals against fitted values") +
   theme_bw() +
   theme(plot.title=element_text(size=10))
@@ -606,12 +614,12 @@ diag_AIC_DR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
   theme_bw() +
   theme(plot.title=element_text(size=10))
 
-diag_AIC_PR_SOI <- qplot(x = SOI, y = AIC.deviance, data = diag_df) +
+diag_AIC_PR_SOI <- qplot(x = SOI, y = AIC.pearson, data = diag_df) +
   geom_point() +
   geom_smooth(size = 1) +
   xlab("SOI") +
-  ylab("Deviance residuals") +
-  ggtitle("Deviance residuals against SOI") +
+  ylab("Pearson residuals") +
+  ggtitle("Pearson residuals against SOI") +
   theme_bw() +
   theme(plot.title=element_text(size=10))
 
@@ -664,7 +672,9 @@ grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
 Again, the pattern appears to be similar to the previous model. There may be concerns with the second and fifth plot where the residual plots diverge slightly from the original plots. It is difficult to say however if this is just noise or if the first estimate of $k$ is better than the second.
 
 ## Conclusion
-The analysis indicates an association between rainfall and SOI phase, a relationship initially suggested by boxplot of rainfall and SOI phase in the EDA and later supported by the models in the subsequent analysis. Based on the model diagnostics, both fitted models seem to adequately capture the mean and variance structure of the data, allowing us to reasonably trust the model conclusions.
+The analysis indicates an association between rainfall and SOI phase, a relationship initially suggested by boxplot of rainfall and SOI phase in the EDA and later supported by the models in the subsequent analysis. Based on the model diagnostics, both fitted models seem to adequately capture the mean and variance structure of the data, allowing us to reasonably trust the model conclusions. The various estimates of $k$ and $\psi$ were all quite close and considered the profile-likelihood confidence interval of $k$ and $\log(\psi)$ all estimates were within a statistical margin of error.
+
+It therefore appears, that using SOI phase as the only predictor of rainfall is reasonable approach. However, as mentioned there could be an issue with the few observations in Phase 3, which makes it difficult to estimate the effect of this phase. Therefore it may be beneficial to construct a model using `SOI` instead of `Phase`, which we will look into in a coming part of the analysis.
 
 ## Bootstrap estimates of k
 
@@ -731,11 +741,11 @@ It appears that the AIC method is fairly robust to changes in the bootstrapped s
 se_AIC <- sd(parametric_k_AIC)
 pander(se_AIC)
 ```
-and the lower and upper bounds of the 95% confidence interval are
-
+and the lower and upper bound of the 95% confidence interval are
 ```{r}
 pander(k_hat_AIC + c(-1, 1) * 1.96 * se_AIC)
 ```
+respectively. We note that this confidence interval is slightly narrower than the one obtained from the profile likelihood method of the $k$ estimated by the linear model. Both confidence intervals contain both estimates of $k$. We may therefore conclude that the two estimates of $k$ are not significantly different.
 
 \newpage
 

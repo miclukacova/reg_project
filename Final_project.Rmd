@@ -840,7 +840,7 @@ grid.arrange(
 )
 ```
 
-Both models seem to fit the data reasonably well. There is no evidence of overfitting so assume the training error would generalize well. Based on this, we choose to proceed with the the log link gamma model rather than the inverse link model.
+Both models seem to fit the data reasonably well. There is no evidence of overfitting so we assume the training error would generalize well. Based on this, we choose to proceed with the the log link gamma model rather than the inverse link model.
 
 ## Additional predictors
 
@@ -849,7 +849,7 @@ We perform an LRT test to see whether or not we should include additional predic
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
 ```
-According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test it seems very unlikely that including additional predictors will improve the predictive strentgth of the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor.
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test it seems very unlikely that including additional predictors will improve the predictive strentgth of the model.
 
 ## Nonlinear effects
 

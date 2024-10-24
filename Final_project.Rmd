@@ -1012,7 +1012,7 @@ grid.arrange(
 
 From the plots we see no clear evidence against the weak model assumptions GA1 and GA2. The residuals seem to be randomly scattered around zero with constant variance. There are a few large residuals, but they are not alarming. As the PP-plot displays, the stronger distributional assumption GA3 seem to be slightly off which implies that inference relying on distributional results should be avoided or employed with consideration. 
 
-We evaluate the residual plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values and the Pearson residuals against fitted values for each bootstrap sample. 
+We evaluate the residual plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values for each bootstrap sample. 
 
 ```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 set.seed(1986234)
@@ -1055,38 +1055,7 @@ grid.arrange(
 )
 ```
 
-The bootstrapped Pearson residual plots
-```{r warning = TRUE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
-grid.arrange(
-  qplot(fitted(glm_list[[1]]), residuals(glm_list[[1]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-  qplot(fitted(glm_list[[2]]), residuals(glm_list[[2]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-  qplot(fitted(glm_list[[3]]), residuals(glm_list[[3]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-  qplot(fitted(glm_list[[4]]), residuals(glm_list[[4]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-   qplot(fitted(glm_list[[5]]), residuals(glm_list[[5]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-  qplot(fitted(glm_list[[6]]), residuals(glm_list[[6]], type = "pearson")) + 
-    xlab("Fitted values") +
-    ylab("Pearson residuals") +
-    geom_smooth(),
-  ncol = 3
-)
-```
-
-The bootstrapped residual plots resemble the original residual plots well. This further indicates that GA1 and GA2 are satisfied. Note how the few large residuals that we observed in the original residual plots are also present in the bootstrapped plots supporting the claim that they are not alarming.
+The bootstrapped residual plots resemble the original residual plots well. This further indicates that GA1 and GA2 are satisfied. Note how the few large residuals that we observed in the original residual plots are also present in the bootstrapped plots supporting the claim that they are not alarming. The bootstrapped Pearson residual plots lead to the same conclusion and are therefore omitted. 
 
 ## Reporting a final model and interpretation
 

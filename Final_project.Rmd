@@ -859,7 +859,7 @@ We perform an LRT test to see whether or not we should include additional predic
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
 ```
-According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test it seems very unlikely that including additional predictors will improve the predictive strentgth of the model.
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test, it seems very unlikely that including additional predictors will improve the predictive strentgth of the model.
 
 ## Nonlinear effects
 
@@ -1020,7 +1020,7 @@ grid.arrange(
 )
 ```
 
-From the plots we see no clear evidence against the weak model assumptions GA1 and GA2. The residuals seem to be randomly scattered around zero with constant variance. There are a few large residuals, but they are not alarming. As the PP-plot displays, the stronger distributional assumption GA3 seem to be slightly off which implies that inference relying on distributional results should be avoided or employed with consideration. 
+From the plots we see no clear evidence against the weak model assumptions GA1 and GA2. The residuals seem to be randomly scattered around zero with constant variance. There are a few large residuals, but they are not alarming. As the PP-plot displays, the stronger distributional assumption GA3 seems to be slightly off, which implies that inference relying on distributional results should be avoided or employed with consideration. 
 
 We evaluate the residual plots via bootstrapping. We compare the residuals with simulated residuals under the null hypothesis that our model is correct. We repeat the bootstrap procedure 6 times, and plot the deviance residuals against fitted values for each bootstrap sample. 
 
@@ -1075,7 +1075,7 @@ The summary of our final model
 summary(mod_final) %>% pander()
 ```
 
-From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. We print the model predictions for a few values of SOI:
+From the summary we can conclude that `SOI` is a significant predictor of `Rain`. Since we have used a natural cubic spline with 2 degrees of freedom to fit our model, the coefficients are difficult to interpret. We instead consider the predictions of the model. We print the model predictions for a few values of `SOI`:
 
 ```{r warning = FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 tibble(
@@ -1098,7 +1098,7 @@ qplot(rain.data1$SOI, rain.data1$Rain) +
   ggtitle("Rain ~ ns(SOI, df = 2)")
 ```
 
-The fitted model predicts that rainfall is increasing as a function of `SOI.` The slope of the model is largest for values of SOI between $-10$ and $10$. For `SOI` values that are larger or smaller than this, the model is more constant. 
+The fitted model predicts that rainfall is increasing as a function of `SOI.` The slope of the model is largest for values of `SOI` between $-10$ and $10$. For `SOI` values that are larger or smaller than this, the model predictions are more constant. 
 
 We will now turn to the construction of confidence intervals for our model. First we will use nonparametric bootstrap to create a combinant based confidence interval for the model as described on page 220. The code used for the pair sampling can be seen below
 

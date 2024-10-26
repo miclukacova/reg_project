@@ -56,8 +56,8 @@ Rain.data = read.table("RaindataEromanga.txt",
 We specify the column classes and print the `head()` and `summary()` of the data set to make sure that the data is read in correctly.
 
 ```{r, echo = FALSE}
-pander(head(Rain.data))
-pander(summary(Rain.data))
+head(Rain.data)
+summary(Rain.data)
 ```
 
 The data set contains five variables: `Year`, `Rain`, `SOI`, `Phase` and `Month.` The `Month` variable is constant and will not be used or analyzed, but keep in mind, that the analysis is carried out for the month of July. The response variable `Rain` represents the total rainfall in July at Eromanga and contains nine missing values, which will be addressed in a subsequent part of the EDA. The `SOI` variable is the southern oscillation index, while `Phase` is a categorical variable indicating the SOI phase on five different levels:
@@ -119,7 +119,7 @@ ggplot(mRain,
   facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
 
-The boxplot suggests that the rainfall is larger in phase 2 and 4, while it appears particularly low in phase 1 and 2. The plot display some correlation between `Phase` and `Rain` as there appear to be a difference in rainfall within the different phases. We finally investigate the correlation between `SOI` and `Phase`. Since both variables describe aspects of SOI we expect some correlation between them.
+The boxplot suggests that the rainfall is larger in phases 2 and 4, while it appears particularly low in phases 1 and 2. The plot display some correlation between `Phase` and `Rain` as there appear to be a difference in rainfall within the different phases. We proceed to investigate the correlation between `SOI` and `Phase`. Since both variables describe aspects of SOI we expect some correlation between them. We fit a simple linear regression model with `SOI` as the response variable and `Phase` as the predictor variable to test this:
 
 ```{r}
 pander(summary(lm(SOI ~ Phase, Rain.data)))
@@ -138,9 +138,9 @@ ggplot(mSOI,
   facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
 
-Since the two predictors are collinear to some extent we will be careful, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing exact values of SOI, `Phase` contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. So although the two variables are correlated they both contain information that the other does not, so it could still be valuable to include both variables in a model. We will go into further details on this matter in subsequent sections.
+Since the two predictors to some extent are collinear we will be careful, when we consider models with both covariates. It is worth noting though, that while `SOI` is a numeric variable containing exact values of SOI, `Phase` contains information on the 'direction' of the SOI, i.e. whether it is increasing, decreasing or constant. To sum up, both variables contain information that the other does not, so it could still be valuable to include them both in a model. We will go into further details on this matter in subsequent sections.
 
-We finally investigate the correlation between `Year` and `Phase`. Since `Phase` is categorical and `Year` is ordinal we use a boxplot to plot the two variables against each other
+We finally investigate the correlation between `Year` and `Phase` with a boxplot:
 
 ```{r warning = FALSE, echo = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
 mYear <- melt(Rain.data[, c("Year", facVar)],
@@ -151,7 +151,7 @@ ggplot(mYear,
   geom_boxplot(fill = I(gray(0.8))) + xlab("") +
   facet_wrap(~ variable, scale = "free_x", ncol = 2) + theme_bw()
 ```
-The plot does not suggest any dependence between `Year` and `Phase`. 
+The plot does not suggest any noteworthy co-linearity between `Year` and `Phase`. 
 
 ## Missing data
 With a better understanding of the data we proceed to investigate and handle the missing data. As noted previously the only missing data is in the response variable `Rain` (7.5 pct. missing).
@@ -178,7 +178,7 @@ grid.arrange(
 )
 ```
 
-Given the modest number of missing observations, it is difficult to identify any clear trends in the missingness. We note that the missingness occurs in consecutive years (except 1933), but there are no distinct pattern beyond that. Without metadata and additional knowledge we are unable to determine if the data is missing completely at random (MCAR), at random (MAR) or not at random (MNAR). It seems unlikely that observations of large rainfall were selectively deleted or that someone was too lazy to record rainfall during heavy rainfalls. A more plausible explanation, given the consecutive years, is that the equipment may be broken for consecutive years or there was a lack of funding these years. The latter explanations would imply that the data is MCAR which implies MAR and we therefore choose to adopt this assumption.
+Given the modest number of missing observations, it is difficult to identify any clear trends in the missingness. There are no missing observations in Phase 3, but this could simply be due to the few observations we in general have in Phase 3. We may also note that the missingness occurs in consecutive years (except 1933), but there are no distinct pattern beyond that. Without metadata and additional knowledge we are unable to determine if the data is missing completely at random (MCAR), at random (MAR) or not at random (MNAR). It seems unlikely that observations of large rainfall were selectively deleted or that someone was too lazy to record rainfall during heavy rainfalls. A more plausible explanation, given the consecutive years, is that the equipment may be broken for consecutive years or there was a lack of funding these years. The latter explanations would imply that the data is MCAR which implies MAR and we therefore choose to adopt this assumption.
 
 Assuming MAR we can use multiple imputation to impute the missing data. If the MAR assumption holds the imputed values are unbiased and the variation in the data set is preserved. We use the `mice()` function (multiple imputations using chained equations) from the package `mice` to perform the multiple imputations. This procedure uses random draws from the conditional distribution of the target variable given the other variables. That is, we take a bootstrap sample from our data and fit a regression model to this sample to predict the missing values. We use _predictive mean matching_ (PMM) to replace the missing values in each imputed data set. This method uses the value of a donor observation to fill in the missing values. The donors are identified by matching the predicted value of the target to the donor value. PMM does not require any distributional assumptions and is therefore fairly robust to different types of data (F. E. Harell, Jr., 2015). 
 
@@ -218,11 +218,11 @@ We note that the densities for all the imputed data sets look very similar to th
 
 
 # Analysis using SOI phase
-In the following part of the project we seek to fit the Tweedie exponential dispersion model to the Eromanga rain data, and predict rainfall as a function of the SOI phase. To fit a Tweedie model we need to estimate the nuisance parameter $k$ assumed to be between 1 and 2. 
+In the following part of the project we fit the Tweedie exponential dispersion model to the Eromanga rain data, and investigate if SOI phase is a good predictor of rainfall. First step is to estimate the nuisance parameter $k$ assumed to be between 1 and 2. 
 
 
 ## Estimating k with a linear regression model
-We initially try to estimate $k$ using the linear relation $VY = \psi \mathcal{V}(\mu) = \psi \mu^k$. This implies that $\log (VY) = \log(\psi) + k \log(\mu)$ and we can therefore estimate $k$ by a linear regression of $\log (VY)$ on $\log(\mu)$. We compute the empirical variance and mean of the `Rain` variable within each SOI phase for each imputed data set and display the result for the first imputed data set:
+We initially try to estimate $k$ using the relation $VY = \psi \mathcal{V}(\mu) = \psi \mu^k$. This implies the linear relation $\log (VY) = \log(\psi) + k \log(\mu)$ and we can therefore estimate $k$ by a linear regression of $\log (VY)$ on $\log(\mu)$. We compute the empirical variance and mean of the `Rain` variable within each SOI phase for each imputed data set and display the result for the first imputed data set:
 
 ```{r}
 grouped_imputatations <- list()
@@ -244,7 +244,7 @@ pander(lm.fit.imputed)
 ```
 
 
-We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots the estimates are fairly similar. We compute confidence interval (based on the standard deviation in the above table output) for the estimates of each imputation and plot them:
+We get an initial estimate of $k$ between $1.388$ and $1.470$ and $\psi$ between $\exp(1.975) = 7.201$ and $\exp(2.133) = 8.440$. Like the density plots of imputed data sets, the estimates for the different imputed data sets are fairly similar. We compute confidence interval of the form $\hat k \pm1.96 \text{se}(\hat k)$ (based on the standard deviation in the above table output) for the estimates of each imputation and plot them:
 
 ```{r warning = FALSE, echo = FALSE, fig.width = 3, fig.height = 3, fig.align = 'center'}
 k_hat_lin_conf <- list()
@@ -296,8 +296,10 @@ pander(c("Estimate of k" = k_hat_lin, "Estimate of psi" = psi_hat_lin))
 
 We can calculate a 95% confidence interval for the estimates of $k$ and $\log(\psi)$ using a profile likelihood method:
 
-```{r}
-pander(confint(lm.fit))
+```{r echo = F}
+k_psi_confint <- rbind(confint(lm.fit), exp(c(confint(lm.fit)[1,1], confint(lm.fit)[1,2])))
+rownames(k_psi_confint) <- c("log psi", "k","psi")
+pander(k_psi_confint)
 ```
 
 We can visually check that the estimated regression coefficients are reasonably estimated by plotting the fitted regression line on top of the data:
@@ -311,7 +313,7 @@ ggplot(data = Rain.data.grp, aes(x = log(meanY), y = log(varY))) +
   theme_bw()
 ```
 
-We see no warning signs from the plot so is seems fair to assume, that the estimated values of $k$ and $\psi$ are decent initial estimates of the true values.
+We see no warning signs from the plot so it seems fair to assume, that the estimated values of $k$ and $\psi$ are decent initial estimates of the true values.
 
 ## Fitting a Tweedie model to the data
 
@@ -355,7 +357,7 @@ millimeters in July. Finally, the model estimates rainfall for Phase 5 to be bor
 ```{r echo = FALSE}
 pander(round(tweedie.fit.pred[[5]], 3))
 ```
-millimeters in July. Hence, the model suggests that Phase 2 and Phase 4, which are when the SOI is consistently positive and rapidly rising respectively, leads to significantly more rain on average than Phase 1. Phase 5, when the SOI is consistently near zero, is predicted to have slightly more rainfall on average, compared to Phase 1 while the model predicts the lowest rainfall on average in SOI Phases 1 and 3 with no significant difference between them. 
+millimeters in July. Hence, the model suggests that Phase 2 and Phase 4, which is when the SOI is consistently positive and rapidly rising respectively, leads to significantly more rain on average than Phase 1. Phase 5, when the SOI is consistently near zero, is predicted to have slightly more rainfall on average, compared to Phase 1 while the model predicts the lowest rainfall on average in SOI Phases 1 and 3 with no significant difference between them. 
 
 Furthermore, the model predicts $\psi$ to be
 ```{r echo = FALSE}
@@ -366,32 +368,30 @@ which is slightly different from the estimate
 ```{r echo = FALSE}
 pander(psi_hat_lin)
 ```
-obtained from the linear regression.
+obtained from the linear regression, but still well within the statistical uncertainty as shown from the profile-likelihood confidence interval.
 
 ## Estimating probability of zero rain in July
 We use the estimates obtained in the previous exercises to estimate the probability that it will not rain in July. In the theoretical exercises we derived the probability of zero rain to be
 
 $$ \mathbb{P}(Y = 0) = \exp(-\lambda^*) = \exp(-\frac{\mu^{2-k}}{\psi (2-k)}) $$
 
-With the two estimates of $\psi$ from the previous exercise, we compute two estimates of the the probability that it will not rain in July. We plug in the estimated values of $k$ and the empirical mean of our data:
+With the two estimates of $\psi$ from the previous exercises, the estimate of $k$ obtained from the linear regression and the empirical mean of our data we can calculate the probability of zero rain in July with the above formula. In addition we calculate the empirical probability of zero rain in July and compare the three estimates:
 
 ```{r}
 mu_hat <- mean(Rain.data.comp$Rain)
+emp_prob_zero <- mean(Rain.data.comp$Rain == 0)
 
-pander(c("Estimate using psi from linear model" 
+pander(c("Psi estimate from linear model" 
          = exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_lin*(2 - k_hat_lin))), 
-         "Estimate using psi from Tweedie model" 
-         = exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_tweedie.fit*(2 - k_hat_lin)))))
+         "Psi estimate from Tweedie model" 
+         = exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_tweedie.fit*(2 - k_hat_lin))),
+         "Empirical probability of zero rain in July" = emp_prob_zero))
 ```
-The two results are quite similar and compared to the empirical probability of zero rain in July
-```{r}
-pander(sum(Rain.data.comp$Rain == 0)/nrow(Rain.data.comp))
-```
-we obtain three estimates that are all very similar. 
+All three estimates are very close to each other, which suggests that the fitted models are reasonable.
 
 
 ## Determining k by minimizing AIC
-We now estimate $k$ by minimizing the Akaike Information Criterion (AIC) with a profile likelihood of a model with SOI phase as explanatory variable. That is, we search for the value of $k \in (1,2)$ that minimizes the AIC. We start by constructing a general profile likelihood function that takes inputs a formula, a family, a data set and an evaluation metric that we wish to optimize.
+We now estimate $k$ by minimizing the Akaike Information Criterion (AIC) with a profile likelihood of a model with SOI phase as explanatory variable. We start by defining a general profile likelihood function that takes inputs a formula, a family, a data set and an evaluation metric that we wish to optimize.
 
 ```{r}
 profile_likelihood <- function(form, family, data, eval) {
@@ -403,7 +403,7 @@ profile_likelihood <- function(form, family, data, eval) {
 }
 ```
 
-We define the specific profile likelihood that minimizes the AIC for different values of $k$ of a Tweedie exponential model with rainfall as response and SOI phase as covariate.  That is, we specify `form = Rain ~ Phase`, `family = tweedie(var.power = k, link.power = 0)`, `data = Rain.data.comp` and `eval = AICtweedie`:
+We then define the specific profile likelihood that minimizes the AIC for different values of $k$ of a Tweedie exponential model with rainfall as response and SOI phase as covariate.  That is, we specify `form = Rain ~ Phase`, `family = tweedie(var.power = k, link.power = 0)`, `data = Rain.data.comp` and `eval = AICtweedie`:
 
 ```{r}
 tweedie.AIC_profile_likelihood <- function(k) {
@@ -414,18 +414,16 @@ tweedie.AIC_profile_likelihood <- function(k) {
 }
 ```
 
-We use `optimize()` to minimize the AIC and find the optimal value of $k$. We only check values of $k$ between $1.05$ and $1.95$ to avoid numerical instability:
-
+We use `optimize()` to minimize the AIC and find the optimal value of $k$. We only check values of $k$ between $1.05$ and $1.95$ to avoid numerical instability. The optimal value of $k$ is
 ```{r}
 k_hat_AIC <- optimize(tweedie.AIC_profile_likelihood, lower = 1.05, upper = 1.95)$minimum
 pander(k_hat_AIC)
 ```
-
-We note that the optimal value of $k$ using the AIC profile likelihood method is fairly close to the value of $k$ estimated by the linear model, which is
+which is quite close to
 ```{r echo = FALSE}
 pander(k_hat_lin)
 ```
-. To ensure, that we have found a minimum for $1<k<2$ we plot the AIC against $k$ and add a vertical and a horizontal line at the optimal value of $k$.
+- the value of $k$ estimated by the linear model. To ensure, that we have indeed found a minimum for $1<k<2$ we plot the AIC against $k$.
 
 ```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width = 4, fig.height = 4, fig.align = 'center'}
 k_plot_df <- data.frame(k = seq(1.05, 1.95, by = 0.001), AIC = sapply(seq(1.05, 1.95, by = 0.001), FUN = tweedie.AIC_profile_likelihood))
@@ -448,8 +446,7 @@ The plot confirms, that `optimize()` has found the global minimum of the AIC for
 
 
 ## Re-estimating with new value of k
-As before we initially fit a Tweedie model to the data using the optimal value of $k$ found by minimizing the AIC profile likelihood.
-
+As before we initially fit a Tweedie model to the data using the value of $k$ found by minimizing the AIC profile likelihood.
 ```{r}
 tweedie.fit.AIC <- glm(Rain ~ Phase, data = Rain.data.comp, 
                        family = tweedie(var.power = k_hat_AIC, link.power = 0))
@@ -461,22 +458,21 @@ We note a slight decrease in standard error and p-value for all coefficients and
 psi_hat_model_AIC <- summary(tweedie.fit.AIC)$dispersion
 pander(psi_hat_model_AIC)
 ```
-is slightly different from the previous estimate 
+is also a bit smaller than the estimate
 ```{r echo = FALSE}
 pander(psi_hat_tweedie.fit)
 ```
-of the Tweedie model. Apart from that the results are identical to the previous model and the interpretation is the same.
+from the previous Tweedie model. Apart from that the results are identical to the previous model and the interpretation is the same.
 
 We recalculate the estimated probability that it will not rain in July by plugging in the estimated values of $k$ and $\psi$ and the empirical mean of our data:
 ```{r}
-pander(c("Estimate using psi from linear model" 
+pander(c("Psi estimate from linear model" 
          = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_lin*(2 - k_hat_AIC))), 
-         "Estimate using psi from Tweedie model" 
-         = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_model_AIC*(2 - k_hat_AIC)))))
-
+         "Psi estimate from Tweedie model" 
+         = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_model_AIC*(2 - k_hat_AIC))),
+         "Empirical probability of zero rain in July" = emp_prob_zero))
 ```
-
-Again the estimates are similar to the estimates obtained from the previous estimate of $k$.
+Again the estimates are similar to the estimates obtained from the previous estimate of $k$. To sum up, both ways of estimating $k$ produces very similar results.
 
 
 ## Model diagnostics
@@ -497,7 +493,7 @@ diag_df <- data.frame(linmod.fitted = linmod_diag$.fitted,
 pander(summary(diag_df))
 ```
 
-We then plot the residuals against the fitted values, first for the linear model estimate of $k$:
+We then plot the residuals against the fitted values, first for Tweedie model using the linear model estimate of $k$:
 
 ```{r, warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 diag_lin_DR_fitted <- qplot(x = linmod.fitted, y = linmod.deviance, data = diag_df) +
@@ -540,7 +536,7 @@ grid.arrange(diag_lin_DR_fitted, diag_lin_PR_fitted, diag_lin_DR_SOI, diag_lin_P
              top = textGrob(paste0("k = ", round(k_hat_lin, 3))))
 ```
 
-From the plots there is no clear indication of model misspecification. The residuals appear to be randomly scattered around zero, indicating that the model captures the mean and variance structure of the data. We further evaluate the plots with bootstrapping. That is, using the estimated mean, dispersion parameter and $k$ we simulate data from a Tweedie distribution and fit a new Tweedie model to this data. We then plot the residuals against the fitted values. If the original data is from a Tweedie distribution with the estimated parameters, we should observe, that the bootstrapped residual plots resemble the original residual plots.
+From the plots there is no clear indication of model misspecification. The residuals appear to be randomly scattered around zero, indicating that the model captures the mean and variance structure of the data. The deviance residual may tend to lie slightly below 0 but it does not seem alarming. We further evaluate the plots with bootstrapping. That is, using the estimated mean, dispersion parameter and $k$ we simulate data from a Tweedie distribution and fit a new Tweedie model to this data. We then plot the residuals against the fitted values. If the original data is from a Tweedie distribution with the estimated parameters, we should observe, that the bootstrapped residual plots resemble the original residual plots.
 
 ```{r warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 set.seed(10102024)
@@ -583,7 +579,7 @@ p6 <- qplot(.fitted, .resid, data = simDiagNew6) + xlab("Fitted values") +
 grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3,
              top = textGrob("Bootstrap deviance residual plots"))
 ```
-We see that the plots by and large resemble the residual plots of the original model. This supports the initial diagnostic plots. That is, there is no clear evidence that the model assumptions are violated. We repeat the procedure for the model fitted with the AIC profile likelihood estimated $k$.
+We see that the plots by and large resemble the residual plots of the original model. This supports the initial diagnostic plots and conclusion - that the model seem to be a reasonable fit. We repeat the procedure for the Tweedie model fitted with the AIC profile likelihood estimate of $k$.
 
 ```{r, warning=FALSE, echo = FALSE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 diag_AIC_DR_fitted <- qplot(x = AIC.fitted, y = AIC.deviance, data = diag_df) +
@@ -672,9 +668,9 @@ grid.arrange(AICp1, AICp2, AICp3, AICp4, AICp5, AICp6, ncol = 3,
 Again, the pattern appears to be similar to the previous model. There may be concerns with the second and fifth plot where the residual plots diverge slightly from the original plots. It is difficult to say however if this is just noise or if the first estimate of $k$ is better than the second.
 
 ## Conclusion
-The analysis indicates an association between rainfall and SOI phase, a relationship initially suggested by boxplot of rainfall and SOI phase in the EDA and later supported by the models in the subsequent analysis. Based on the model diagnostics, both fitted models seem to adequately capture the mean and variance structure of the data, allowing us to reasonably trust the model conclusions. The various estimates of $k$ and $\psi$ were all quite close and considered the profile-likelihood confidence interval of $k$ and $\log(\psi)$ all estimates were within a statistical margin of error.
+The analysis indicates an association between rainfall and SOI phase, a relationship initially suggested by the boxplot of rainfall and SOI phase in the EDA and later supported by the fitted models in the subsequent analysis. Based on the model diagnostics, both fitted models seem to adequately capture the mean and variance structure of the data, allowing us to reasonably trust the model conclusions. The various estimates of $k$ and $\psi$ were all close and considering the profile-likelihood confidence interval of $k$ and $\log(\psi)$ all estimates were within a statistical margin of error.
 
-It therefore appears, that using SOI phase as the only predictor of rainfall is reasonable approach. However, as mentioned there could be an issue with the few observations in Phase 3, which makes it difficult to estimate the effect of this phase. Therefore it may be beneficial to construct a model using `SOI` instead of `Phase`, which we will look into in a coming part of the analysis.
+It therefore appears, that using SOI phase as the only predictor of rainfall is a reasonable approach. However, as mentioned there could be an issue with the modest amount of observations in Phase 3, which makes it difficult to estimate the effect of this phase. Therefore it may be useful to construct a model using `SOI` instead of `Phase`, which we will look into in a coming part of the analysis.
 
 ## Bootstrap estimates of k
 
@@ -745,7 +741,7 @@ and the lower and upper bound of the 95% confidence interval are
 ```{r}
 pander(k_hat_AIC + c(-1, 1) * 1.96 * se_AIC)
 ```
-respectively. We note that this confidence interval is slightly narrower than the one obtained from the profile likelihood method of the $k$ estimated by the linear model. Both confidence intervals contain both estimates of $k$. We may therefore conclude that the two estimates of $k$ are not significantly different.
+respectively. We note that this confidence interval is slightly narrower than the profile likelihood confidence interval of $k$ obtained from the the linear model. Both confidence intervals contain the two estimates of $k$ and we therefore conclude that the two estimates of $k$ are not significantly different.
 
 \newpage
 
@@ -859,11 +855,11 @@ We perform an LRT test to see whether or not we should include additional predic
 ```{r}
 add1(glm_gamma_log, Rain ~ SOI + Phase + Year, test = "LRT") %>% kable()
 ```
-According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor. However based on the weak correlation and the considerations regarding `SOI`and `Phase` together with the results of the test, it seems very unlikely that including additional predictors will improve the predictive strentgth of the model.
+According to the LRT test there is not evidence in data that suggest that the additional predictors should be added to the model. We therefore choose to proceed with the model that only includes `SOI` as a predictor.
 
 ## Nonlinear effects
 
-We consider to include a non-linear effect of `SOI`. In particular we explore the inclusion of a natural cubic spline with 2,3,4,5 or 6 degrees of freedom:
+We consider to include a non-linear effect of `SOI`. In particular we explore the inclusion of a natural cubic splines with 2,3,4,5 or 6 degrees of freedom:
 
 ```{r warning = FALSE, echo = TRUE, message = FALSE, fig.width = 10, fig.height = 6, fig.align = 'center'}
 form1 <- Rain ~ SOI
@@ -1157,6 +1153,8 @@ grid.arrange(p1, p2, nrow = 1)
 
 We see that the two confidence interval are narrow for the `SOI` values where we have many observations and wide for the `SOI` values for which we have few observations. This is to be expected. A thing to point out is the asymmetry that is present in the bootstrap combinant based confidence interval, indicating a certain asymmetry of the distribution of the model predictions. Note also, that the bootstrap confidence interval covers negative values, which is of course a poor prediction of rainfall. Apart from this, the two confidence intervals resemble each other quite a lot.
 
+For future work it would be interesting to fit a Tweedie model with `SOI` as predictor to use the zero rainfall observations and compare the findings of this model with the findings of the Tweedie model using `Phase` as predictor. It would also be interesting to fit a Tweedie model conditionally on having rained using the estimate of $k$ determined by the AIC profile likelihood and compare this model to the Gamma model we fitted in the analysis. Finally, it would be of interest to provide prediction intervals for the model predictions to give a more complete picture of the uncertainty of the predictions.
+
 ## Conclusion
 The analysis carried out in this project suggests that both SOI phase and SOI are significant predictors of the rainfall at Eromanga in Queensland, Australia during the month of July. 
 
@@ -1165,7 +1163,5 @@ In the first part of the analysis we fitted a Tweedie model with `Phase` as pred
 In the second part of the analysis, we chose to model the data conditionally on having rained to provide a different perspective and avoid repeating previous steps of the analysis. Given the persistent right skew in the data and the AIC profile-likelihood estimate of $k = 2.198$, we selected a Gamma model which corresponds to a Tweedie model with $k = 2$. We chose the log link to keep predictions within the support of the distribution and because this model performed best in terms of training error compared to a model with the inverse-link. We decided not to include further predictors as they appeared to be insignificant. We finally included a natural cubic spline with 2 degrees of freedom since this model had the smallest generalization error compared to models fitted on natural cubic splines with degrees of freedom ranging from 1 to 6. We were finally able to conclude that `SOI` is a significant predictor of `Rain` and use the model to predict rainfall at different `SOI` values.
 
 Although the models from part one and part two of the analysis are not directly comparable, their predictions appeared to be within the same range. The Tweedie model from part one predicted large amounts of rainfall (point estimate of $33.95$) when the SOI phase is consistently positive and small amounts of rainfall (point estimate of $2.34$) when SOI phase is rapidly falling. The Gamma model from part two predicted large amounts of rainfall when SOI is high (point estimate of $35.57$ when SOI is $20$) and small amounts of rainfall when SOI is low (point estimate of $4.01$ when SOI is $-20$). This suggest that `Rain` is increasing as a function of `SOI` and that a consistently positive or rapidly rising SOI phase leads to larger amounts of rain than consistently negative or rapidly falling SOI phases.
-
-For future work it would be interesting to fit a Tweedie model with `SOI` as predictor to use the zero rainfall observations and compare the findings of this model with the findings of the Tweedie model using `Phase` as predictor. It would also be interesting to fit a Tweedie model conditionally on having rained using the estimate of $k$ determined by the AIC profile likelihood and compare this model to the Gamma model we fitted in the analysis. Finally, it would be of interest to provide prediction intervals for the model predictions to give a more complete picture of the uncertainty of the predictions.
 
 

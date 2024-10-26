@@ -381,9 +381,9 @@ With the two estimates of $\psi$ from the previous exercises, the estimate of $k
 mu_hat <- mean(Rain.data.comp$Rain)
 emp_prob_zero <- mean(Rain.data.comp$Rain == 0)
 
-pander(c("Psi estimate from linear model" 
+pander(c("Estimate using psi from linear model" 
          = exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_lin*(2 - k_hat_lin))), 
-         "Psi estimate from Tweedie model" 
+         "Estimate using psi from Tweedie model" 
          = exp(-mu_hat^(2 - k_hat_lin)/(psi_hat_tweedie.fit*(2 - k_hat_lin))),
          "Empirical probability of zero rain in July" = emp_prob_zero))
 ```
@@ -466,9 +466,9 @@ from the previous Tweedie model. Apart from that the results are identical to th
 
 We recalculate the estimated probability that it will not rain in July by plugging in the estimated values of $k$ and $\psi$ and the empirical mean of our data:
 ```{r}
-pander(c("Psi estimate from linear model" 
+pander(c("Estimate using psi from linear model" 
          = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_lin*(2 - k_hat_AIC))), 
-         "Psi estimate from Tweedie model" 
+         "Estimate using psi from Tweedie model" 
          = exp(-mu_hat^(2 - k_hat_AIC)/(psi_hat_model_AIC*(2 - k_hat_AIC))),
          "Empirical probability of zero rain in July" = emp_prob_zero))
 ```
